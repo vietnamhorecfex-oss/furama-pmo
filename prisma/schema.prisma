@@ -1,0 +1,348 @@
+// Furama PMO — Prisma schema (source of truth for the database)
+// Run: prisma migrate dev --name init   |   prisma generate
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------- Enums -----------------------------
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  OPENING
+  CLOSED
+  ARCHIVED
+}
+
+enum MemberRole {
+  OWNER
+  PM
+  LEAD
+  MEMBER
+  VIEWER
+}
+
+enum WorkstreamTrack {
+  PMO
+  MARKETING
+  OPERATIONS
+}
+
+enum TaskStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  IN_REVIEW
+  BLOCKED
+  COMPLETED
+}
+
+enum Priority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum AssignmentRole {
+  IN_CHARGE
+  SUPPORT
+  APPROVER
+}
+
+enum MilestoneType {
+  MILESTONE
+  GATE
+}
+
+enum GateStatus {
+  PENDING
+  PASSED
+  FAILED
+  NA
+}
+
+// ----------------------------- Tenancy & identity -----------------------------
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  users     User[]
+  projects  Project[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  orgId        String
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  email        String
+  name         String
+  passwordHash String
+  avatarColor  String   @default("#2F80ED")
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+
+  memberships   ProjectMember[]
+  assignments   TaskAssignment[]
+  comments      Comment[]
+  auditLogs     AuditLog[]      @relation("AuditActor")
+  refreshTokens RefreshToken[]
+  createdProjects Project[]     @relation("ProjectCreatedBy")
+  createdTasks  Task[]          @relation("TaskCreatedBy")
+  updatedTasks  Task[]          @relation("TaskUpdatedBy")
+
+  @@unique([orgId, email])
+  @@index([orgId])
+}
+
+// ----------------------------- Project & membership -----------------------------
+model Project {
+  id           String   @id @default(cuid())
+  orgId        String
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name         String
+  location     String?
+  status       ProjectStatus @default(PLANNING)
+  startDate    DateTime?
+  endDate      DateTime?
+  openingDate  DateTime?
+  budgetCapVnd BigInt   @default(0)
+  createdById  String?
+  createdBy    User?    @relation("ProjectCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime @default(now())
+  archivedAt   DateTime?
+
+  members        ProjectMember[]
+  phases         Phase[]
+  workstreams    Workstream[]
+  statusDefs     StatusDef[]
+  priorityDefs   PriorityDef[]
+  budgetCategories BudgetCategory[]
+  tasks          Task[]
+  milestones     Milestone[]
+  auditLogs      AuditLog[]
+
+  @@index([orgId])
+}
+
+model ProjectMember {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        MemberRole @default(VIEWER)
+  memberLabel String?
+  createdAt   DateTime @default(now())
+  workstreams MemberWorkstream[]
+
+  @@unique([projectId, userId])
+  @@index([userId])
+}
+
+model MemberWorkstream {
+  id              String @id @default(cuid())
+  projectMemberId String
+  projectMember   ProjectMember @relation(fields: [projectMemberId], references: [id], onDelete: Cascade)
+  workstreamId    String
+  workstream      Workstream @relation(fields: [workstreamId], references: [id], onDelete: Cascade)
+
+  @@unique([projectMemberId, workstreamId])
+}
+
+// ----------------------------- Configurable dimensions -----------------------------
+model Phase {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  order     Int      @default(0)
+  startDate DateTime?
+  endDate   DateTime?
+  tasks     Task[]
+  @@unique([projectId, name])
+}
+
+model Workstream {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  track     WorkstreamTrack @default(PMO)
+  order     Int      @default(0)
+  tasks     Task[]
+  memberScopes MemberWorkstream[]
+  @@unique([projectId, name])
+}
+
+model StatusDef {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  key       String  // matches TaskStatus value or custom
+  color     String  @default("#94A3B8")
+  order     Int     @default(0)
+  isTerminal Boolean @default(false)
+  @@unique([projectId, key])
+}
+
+model PriorityDef {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  key       String
+  color     String  @default("#7A8B99")
+  order     Int     @default(0)
+  @@unique([projectId, key])
+}
+
+model BudgetCategory {
+  id         String  @id @default(cuid())
+  projectId  String
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name       String
+  ownerLabel String?
+  plannedVnd BigInt  @default(0)
+  order      Int     @default(0)
+  tasks      Task[]
+  @@unique([projectId, name])
+}
+
+// ----------------------------- Tasks -----------------------------
+model Task {
+  id              String   @id @default(cuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  code            String   // WBS, unique per project
+  title           String
+  description     String?
+  phaseId         String?
+  phase           Phase?   @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  workstreamId    String?
+  workstream      Workstream? @relation(fields: [workstreamId], references: [id], onDelete: SetNull)
+  category        String?
+  budgetCategoryId String?
+  budgetCategory  BudgetCategory? @relation(fields: [budgetCategoryId], references: [id], onDelete: SetNull)
+
+  startDate    DateTime?
+  deadline     DateTime?
+  durationDays Int?
+  priority     Priority   @default(MEDIUM)
+  status       TaskStatus @default(NOT_STARTED)
+  percent      Int        @default(0)
+
+  budgetVnd    BigInt     @default(0)
+  actualVnd    BigInt     @default(0)
+
+  kpi            String?
+  deliverable    String?
+  dependencyText String?
+  riskText       String?
+  audience       String?
+  notes          String?
+  inChargeLabel  String?   // denormalized for fast lists / import fidelity
+
+  createdById String?
+  createdBy   User?   @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?   @relation("TaskUpdatedBy", fields: [updatedById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  assignments  TaskAssignment[]
+  comments     Comment[]
+  dependencies TaskDependency[] @relation("TaskDeps")
+  dependents   TaskDependency[] @relation("DependsOn")
+
+  @@unique([projectId, code])
+  @@index([projectId, status])
+  @@index([projectId, deadline])
+  @@index([projectId, phaseId])
+  @@index([projectId, workstreamId])
+}
+
+model TaskAssignment {
+  id     String @id @default(cuid())
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId String?
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  label  String
+  role   AssignmentRole @default(IN_CHARGE)
+  @@index([taskId])
+  @@index([userId])
+}
+
+model TaskDependency {
+  id            String @id @default(cuid())
+  taskId        String
+  task          Task   @relation("TaskDeps", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOnTaskId String
+  dependsOn     Task   @relation("DependsOn", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
+  @@unique([taskId, dependsOnTaskId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+  @@index([taskId, createdAt])
+}
+
+// ----------------------------- Gates / milestones -----------------------------
+model Milestone {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  date      DateTime?
+  type      MilestoneType @default(MILESTONE)
+  status    GateStatus    @default(PENDING)
+  criteria  Json?
+  notes     String?
+  @@index([projectId])
+}
+
+// ----------------------------- Audit & auth -----------------------------
+model AuditLog {
+  id         String   @id @default(cuid())
+  projectId  String?
+  project    Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  actorId    String?
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String?
+  before     Json?
+  after      Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  @@index([projectId, createdAt])
+  @@index([entityType, entityId])
+}
+
+model RefreshToken {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyId     String
+  tokenHash    String   @unique
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById String?
+  createdByIp  String?
+  createdAt    DateTime @default(now())
+  @@index([userId])
+  @@index([familyId])
+}

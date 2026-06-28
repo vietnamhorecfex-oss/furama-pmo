@@ -1,0 +1,17 @@
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.local
+*.log
+.DS_Store
+.turbo/
+.vite/
+web/dist/
+backend/dist/
+shared/dist/
+# Prisma generated client
+node_modules/.prisma/
+playwright-report/
+test-results/

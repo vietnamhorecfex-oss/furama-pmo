@@ -1,0 +1,129 @@
+openapi: 3.1.0
+info:
+  title: Furama PMO API
+  version: 1.0.0
+  description: Restaurant (cluster) opening project management. See docs/04-api-spec.md for the full catalog; this file is the machine-readable contract Claude Code should keep in sync.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+    refreshCookie: { type: apiKey, in: cookie, name: refresh_token }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string, enum: [VALIDATION, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL] }
+            message: { type: string }
+            requestId: { type: string }
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 10 }
+    TaskStatus: { type: string, enum: [NOT_STARTED, IN_PROGRESS, IN_REVIEW, BLOCKED, COMPLETED] }
+    Priority: { type: string, enum: [CRITICAL, HIGH, MEDIUM, LOW] }
+    Task:
+      type: object
+      properties:
+        id: { type: string }
+        code: { type: string }
+        title: { type: string, maxLength: 200 }
+        description: { type: string, maxLength: 4000 }
+        phaseId: { type: string, nullable: true }
+        workstreamId: { type: string, nullable: true }
+        category: { type: string, nullable: true }
+        startDate: { type: string, format: date, nullable: true }
+        deadline: { type: string, format: date, nullable: true }
+        durationDays: { type: integer, nullable: true }
+        priority: { $ref: '#/components/schemas/Priority' }
+        status: { $ref: '#/components/schemas/TaskStatus' }
+        percent: { type: integer, minimum: 0, maximum: 100 }
+        budgetVnd: { type: integer, format: int64, minimum: 0 }
+        actualVnd: { type: integer, format: int64, minimum: 0 }
+        kpi: { type: string, nullable: true }
+        deliverable: { type: string, nullable: true }
+    TaskCreate:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, maxLength: 200 }
+        description: { type: string, maxLength: 4000 }
+        phaseId: { type: string }
+        workstreamId: { type: string }
+        startDate: { type: string, format: date }
+        deadline: { type: string, format: date }
+        priority: { $ref: '#/components/schemas/Priority' }
+        budgetVnd: { type: integer, format: int64, minimum: 0 }
+    ProgressUpdate:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/TaskStatus' }
+        percent: { type: integer, minimum: 0, maximum: 100 }
+        notes: { type: string, maxLength: 4000 }
+paths:
+  /auth/login:
+    post:
+      security: []
+      summary: Sign in (rate-limited)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LoginInput' } } } }
+      responses:
+        '200': { description: OK; sets refresh cookie }
+        '401': { description: Invalid credentials, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '429': { description: Rate limited }
+  /auth/refresh:
+    post:
+      security: [{ refreshCookie: [] }]
+      summary: Rotate refresh token, get new access token
+      responses: { '200': { description: OK }, '401': { description: Reused/expired -> family revoked } }
+  /auth/me:
+    get: { summary: Current user + memberships, responses: { '200': { description: OK } } }
+  /projects:
+    get: { summary: Projects the caller belongs to, responses: { '200': { description: OK } } }
+    post: { summary: Create project (caller becomes OWNER), responses: { '201': { description: Created } } }
+  /projects/{pid}/tasks:
+    get:
+      summary: List tasks (filter/sort/paginate)
+      parameters:
+        - { name: pid, in: path, required: true, schema: { type: string } }
+        - { name: phaseId, in: query, schema: { type: string } }
+        - { name: workstreamId, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/TaskStatus' } }
+        - { name: priority, in: query, schema: { $ref: '#/components/schemas/Priority' } }
+        - { name: assignee, in: query, schema: { type: string } }
+        - { name: q, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, maximum: 100, default: 25 } }
+      responses: { '200': { description: OK }, '403': { description: Not a member } }
+    post:
+      summary: Create task (OWNER/PM/LEAD-scope)
+      parameters: [{ name: pid, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/TaskCreate' } } } }
+      responses: { '201': { description: Created }, '403': { description: Forbidden } }
+  /tasks/{id}/progress:
+    patch:
+      summary: Update progress (OWNER/PM/LEAD-scope/MEMBER-assignee). Applies status<->percent invariants.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ProgressUpdate' } } } }
+      responses: { '200': { description: OK }, '403': { description: Forbidden }, '404': { description: Not found } }
+  /projects/{pid}/budget/summary:
+    get:
+      summary: Budget rollups vs cap
+      parameters: [{ name: pid, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK } }
+  /projects/{pid}/dashboard:
+    get:
+      summary: Dashboard KPIs and aggregates
+      parameters: [{ name: pid, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK } }
+  /projects/{pid}/import:
+    post:
+      summary: Import packed seed JSON (OWNER/PM)
+      parameters: [{ name: pid, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Import summary } }

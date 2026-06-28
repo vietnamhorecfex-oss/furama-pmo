@@ -13,6 +13,9 @@ import { HealthController } from './health/health.controller';
 import { AuditModule } from './audit/audit.module';
 import { RbacModule } from './rbac/rbac.module';
 import { AuthModule } from './auth/auth.module';
+import { ProjectsModule } from './projects/projects.module';
+import { MembersModule } from './members/members.module';
+import { ConfigDimModule } from './config-dim/config.module';
 
 @Module({
   imports: [
@@ -40,6 +43,9 @@ import { AuthModule } from './auth/auth.module';
     AuditModule,
     RbacModule,
     AuthModule,
+    ProjectsModule,
+    MembersModule,
+    ConfigDimModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

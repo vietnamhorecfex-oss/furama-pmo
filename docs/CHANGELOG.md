@@ -33,6 +33,20 @@ Local machine had no Node/pnpm/Docker. Installed `node` + `pnpm` via Homebrew, a
 ### Refresh token format
 The raw refresh cookie value is `${tokenId}.${secret}`. The DB stores only `sha256(secret)`, so leaking the `RefreshToken` table does not expose usable tokens. Family-level revocation uses `familyId` (UUID); each successful login starts a new family.
 
+## 2026-06-29 — M2 projects + members + config
+
+### AuthModule promoted to @Global
+After RbacModule (also global) started providing `JwtAuthGuard` to feature modules, those modules couldn't resolve `TokensService` (declared in `AuthModule`) when Nest instantiated the guard in their context. Marking `AuthModule` `@Global` makes `TokensService` reachable everywhere a guard is used, without each module needing to import `AuthModule` explicitly. The original `forwardRef` between Auth and Rbac stays.
+
+### Cascade rename for StatusDef / PriorityDef
+The current Prisma schema keeps `Task.status` and `Task.priority` as fixed enums (decision recorded in `docs/02-data-model.md §3`). So a "rename" of a StatusDef/PriorityDef changes the def row but does NOT migrate Task rows — the cascade UPDATE path is in place inside a transaction, commented out, ready to enable if v1.x relaxes Task to a free-text key.
+
+### Audit JSON typing
+Prisma's `InputJsonValue` rejects `Record<string, unknown>`. Use `as Prisma.InputJsonValue` at the audit-payload boundary; the underlying value is a known object literal.
+
+## Gate M2 — verified DONE
+`pnpm typecheck` clean · `pnpm test` **91 passed** (3 health + 73 RBAC matrix + 4 tokens integration + 3 projects + 4 members + 4 config). Live smoke: create project (auto-OWNER) → create 2 phases → duplicate phase (409) → reorder phases (verified by order swap) → body with extra field (400 VALIDATION) → register second user, add as MEMBER (201) → MEMBER tries MANAGE_MEMBERS (403). Audit rows present for every mutation.
+
 ## Gate M1 — verified DONE
 `pnpm typecheck` clean · `pnpm test` 80 passed (3 health + 73 RBAC matrix + 4 tokens integration). Live smoke test: register→login→/me→refresh (rotation)→reuse OLD (401 + family revoke)→NEW refresh now dead (401)→bad login generic 401. DB: both refresh rows revoked after the reuse attempt; audit rows for `user.registered` + `user.login` present.
 

@@ -18,6 +18,8 @@ import { MembersModule } from './members/members.module';
 import { ConfigDimModule } from './config-dim/config.module';
 import { TasksModule } from './tasks/tasks.module';
 import { ImportExportModule } from './import-export/import-export.module';
+import { CommentsModule } from './comments/comments.module';
+import { RealtimeModule } from './realtime/realtime.module';
 
 @Module({
   imports: [
@@ -50,6 +52,8 @@ import { ImportExportModule } from './import-export/import-export.module';
     ConfigDimModule,
     TasksModule,
     ImportExportModule,
+    CommentsModule,
+    RealtimeModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

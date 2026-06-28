@@ -5,3 +5,5 @@ export * from './schemas/project';
 export * from './schemas/member';
 export * from './schemas/config-dim';
 export * from './schemas/task';
+export * from './schemas/ws-events';
+export * from './schemas/comment';

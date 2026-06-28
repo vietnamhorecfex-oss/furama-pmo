@@ -13,6 +13,9 @@ import {
 } from '../test-utils/integration-helpers';
 import { TasksService } from './tasks.service';
 import { ProjectsService } from '../projects/projects.service';
+import type { RealtimeGateway } from '../realtime/realtime.gateway';
+
+const fakeRealtime = { emit: jest.fn() } as unknown as RealtimeGateway;
 
 const itDb = SKIP_DB ? it.skip : it;
 
@@ -25,7 +28,7 @@ describe('TasksService (M3 integration)', () => {
   beforeAll(async () => {
     if (SKIP_DB) return;
     deps = await bootIntegrationDeps();
-    tasks = new TasksService(deps.prisma, deps.audit, deps.rbac);
+    tasks = new TasksService(deps.prisma, deps.audit, deps.rbac, fakeRealtime);
     projects = new ProjectsService(deps.prisma, deps.audit, deps.rbac);
   });
 

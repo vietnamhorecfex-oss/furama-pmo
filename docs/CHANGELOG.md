@@ -55,6 +55,24 @@ The Prisma model names the side from this-task-depends-on rows `dependencies` (r
 ### Invariant order: Kanban reset before IN_PROGRESS promotion
 First implementation had `0<percent<100 + NOT_STARTED → IN_PROGRESS` fire before the Kanban reset, so dragging a 40%-in-progress card back to the NOT_STARTED column promoted it right back to IN_PROGRESS. Caught by the invariant unit test. Fixed: when `kanbanMove=true` and `next.status=NOT_STARTED` and the caller did not also send a `percent`, reset percent to 0 first, then evaluate the other rules.
 
+## 2026-06-29 — M4 progress + comments + realtime + web shell
+
+### Realtime
+- `RealtimeGateway` (namespace `/ws`, socket.io) verifies the access token at `handleConnection` (auth via `handshake.auth.token` or `Authorization: Bearer`); pins `socket.data.userId`. Clients explicitly call `project:join { projectId }` — the gateway verifies membership via `RbacService.effectiveRole` BEFORE adding the socket to `project:<pid>`. R-05 unit test asserts non-members cannot join and that `emit()` reaches only the target room.
+- `TasksService.create/update/delete/updateProgress` and `CommentsService.add` call `realtime.emit(projectId, event, payload)` per docs/04 §5. `RealtimeModule` is `@Global` so any service can inject the gateway.
+- Multi-instance fan-out via Redis adapter is hooked at AppModule level when scaling horizontally (currently the in-memory adapter is fine for single-instance dev/staging).
+
+### Web shell
+- Auth store keeps the access token in memory only (XSS-resistant). Refresh cookie does silent refresh via a single in-flight `/auth/refresh` to avoid stampeding the 10/min/IP throttle.
+- `socket.io-client` subscribes once per signed-in session; on `task.*` / `comment.created` it invalidates the matching TanStack Query keys — invalidate-then-refetch is simpler and more correct than shape-aware cache patching across filter combos.
+- `TasksTable` (paginated + filtered, inline status `<select>`), `KanbanBoard` (HTML5 native DnD across 5 status columns), `TaskDrawer` (slide-over + comments) — no external DnD lib required.
+
+### Comment sanitisation
+HTML tags and `javascript:` / `data:` / `vbscript:` URLs are stripped from comment bodies server-side. Live test: `<script>alert(1)</script>` → `alert(1)`.
+
+## Gate M4 — verified DONE
+`pnpm typecheck` clean · `pnpm test` **111 passed** (added 5 realtime unit). Live WS E2E: spectator socket joins `project:<pid>` and receives both `task.progress` (status=COMPLETED, percent=100 — invariant applied) and `comment.created` events fired by a separate HTTP request. Comment sanitisation verified. Web `pnpm build` produces a 293 KB JS bundle (gzip 94 KB).
+
 ## Gate M3 — verified DONE
 `pnpm typecheck` clean · `pnpm test` **106 passed** (added 6 invariant + 4 tasks + 4 import-export integration). `pnpm db:seed` imports the real 628-task `tasks.seed.json` end-to-end: **628 inserted on the first run, 628 updated on the second** (zero clones); creates 3 workstreams (PMO/MARKETING/OPERATIONS) and 32 phases, with all 1884 assignments (3 per task: IN_CHARGE / SUPPORT / APPROVER) wired. Live smoke: paginated list + filter (`priority=CRITICAL&q=opening` → 84 matches), `/tasks/:id`, progress update with invariants (IN_PROGRESS 30 → COMPLETED forces 100; inconsistent BLOCKED+100 → 400), CSV export header + 628 rows.
 

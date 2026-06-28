@@ -38,6 +38,7 @@ import type {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RbacService, type AuthContext } from '../rbac/rbac.service';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { applyTaskInvariants } from './task-invariants';
 
 const SORTABLE_FIELDS = new Set([
@@ -58,6 +59,7 @@ export class TasksService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly rbac: RbacService,
+    private readonly realtime: RealtimeGateway,
   ) {}
 
   // ====================================================================== READ
@@ -197,6 +199,12 @@ export class TasksService {
       { actorId: ctx.userId, projectId, ip },
       { action: 'task.created', entityType: 'Task', entityId: created.id, after: { code: created.code, title: created.title } },
     );
+    this.realtime.emit(projectId, 'task.created', {
+      projectId,
+      taskId: created.id,
+      code: created.code,
+      by: ctx.userId,
+    });
     return this.get(ctx, created.id);
   }
 
@@ -255,6 +263,11 @@ export class TasksService {
       { actorId: ctx.userId, projectId: before.projectId, ip },
       { action: 'task.updated', entityType: 'Task', entityId: taskId, before: { status: before.status, percent: before.percent }, after: { status: after.status, percent: after.percent } },
     );
+    this.realtime.emit(before.projectId, 'task.updated', {
+      projectId: before.projectId,
+      taskId,
+      by: ctx.userId,
+    });
     return this.get(ctx, taskId);
   }
 
@@ -294,6 +307,13 @@ export class TasksService {
         after: { status: after.status, percent: after.percent },
       },
     );
+    this.realtime.emit(before.projectId, 'task.progress', {
+      projectId: before.projectId,
+      taskId,
+      status: after.status,
+      percent: after.percent,
+      by: ctx.userId,
+    });
     return this.get(ctx, taskId);
   }
 
@@ -306,6 +326,11 @@ export class TasksService {
       { actorId: ctx.userId, projectId: before.projectId, ip },
       { action: 'task.deleted', entityType: 'Task', entityId: taskId, before: { code: before.code } },
     );
+    this.realtime.emit(before.projectId, 'task.deleted', {
+      projectId: before.projectId,
+      taskId,
+      by: ctx.userId,
+    });
   }
 
   // ====================================================================== ASSIGNMENTS / DEPS

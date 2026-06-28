@@ -9,6 +9,8 @@ export default defineConfig({
       '/api': 'http://localhost:3000',
       '/health': 'http://localhost:3000',
       '/ready': 'http://localhost:3000',
+      // Socket.io path used by the realtime gateway (namespace /ws).
+      '/socket.io': { target: 'http://localhost:3000', ws: true },
     },
   },
 });

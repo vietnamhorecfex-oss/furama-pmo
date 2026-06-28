@@ -3,11 +3,16 @@
  * Feature modules (auth, rbac, projects, …) are registered here as they land per TASK-BREAKDOWN.
  */
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { validateEnv } from './config/env';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthController } from './health/health.controller';
+import { AuditModule } from './audit/audit.module';
+import { RbacModule } from './rbac/rbac.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -30,8 +35,13 @@ import { HealthController } from './health/health.controller';
             : { target: 'pino-pretty', options: { singleLine: true } },
       },
     }),
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 600 }]),
     PrismaModule,
+    AuditModule,
+    RbacModule,
+    AuthModule,
   ],
   controllers: [HealthController],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

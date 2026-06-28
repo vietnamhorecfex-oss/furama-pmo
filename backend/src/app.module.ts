@@ -16,6 +16,8 @@ import { AuthModule } from './auth/auth.module';
 import { ProjectsModule } from './projects/projects.module';
 import { MembersModule } from './members/members.module';
 import { ConfigDimModule } from './config-dim/config.module';
+import { TasksModule } from './tasks/tasks.module';
+import { ImportExportModule } from './import-export/import-export.module';
 
 @Module({
   imports: [
@@ -46,6 +48,8 @@ import { ConfigDimModule } from './config-dim/config.module';
     ProjectsModule,
     MembersModule,
     ConfigDimModule,
+    TasksModule,
+    ImportExportModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

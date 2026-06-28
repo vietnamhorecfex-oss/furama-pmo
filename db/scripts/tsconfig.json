@@ -1,0 +1,10 @@
+{
+  "extends": "../../backend/tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "../../",
+    "noEmit": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  },
+  "include": ["./*.ts", "../../backend/src/**/*.ts"]
+}

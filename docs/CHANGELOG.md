@@ -44,6 +44,20 @@ The current Prisma schema keeps `Task.status` and `Task.priority` as fixed enums
 ### Audit JSON typing
 Prisma's `InputJsonValue` rejects `Record<string, unknown>`. Use `as Prisma.InputJsonValue` at the audit-payload boundary; the underlying value is a known object literal.
 
+## 2026-06-29 — M3 tasks + seed import
+
+### Seed script avoids Nest DI
+tsx/esbuild does not emit decorator metadata reliably for `reflect-metadata`. That made `Test.createTestingModule({ providers: [...] })` resolve constructor args as `undefined` inside the seed script. The script now instantiates `PrismaService`, `AuditService`, `RbacService`, and `ImportExportService` manually with `new`. Honest and simple for a one-shot script; the runtime app still uses Nest DI normally.
+
+### Task.dependencies (not Task.dependsOn)
+The Prisma model names the side from this-task-depends-on rows `dependencies` (relation name `TaskDeps`). Use `include: { dependencies: ... }` when joining, not `dependsOn`.
+
+### Invariant order: Kanban reset before IN_PROGRESS promotion
+First implementation had `0<percent<100 + NOT_STARTED → IN_PROGRESS` fire before the Kanban reset, so dragging a 40%-in-progress card back to the NOT_STARTED column promoted it right back to IN_PROGRESS. Caught by the invariant unit test. Fixed: when `kanbanMove=true` and `next.status=NOT_STARTED` and the caller did not also send a `percent`, reset percent to 0 first, then evaluate the other rules.
+
+## Gate M3 — verified DONE
+`pnpm typecheck` clean · `pnpm test` **106 passed** (added 6 invariant + 4 tasks + 4 import-export integration). `pnpm db:seed` imports the real 628-task `tasks.seed.json` end-to-end: **628 inserted on the first run, 628 updated on the second** (zero clones); creates 3 workstreams (PMO/MARKETING/OPERATIONS) and 32 phases, with all 1884 assignments (3 per task: IN_CHARGE / SUPPORT / APPROVER) wired. Live smoke: paginated list + filter (`priority=CRITICAL&q=opening` → 84 matches), `/tasks/:id`, progress update with invariants (IN_PROGRESS 30 → COMPLETED forces 100; inconsistent BLOCKED+100 → 400), CSV export header + 628 rows.
+
 ## Gate M2 — verified DONE
 `pnpm typecheck` clean · `pnpm test` **91 passed** (3 health + 73 RBAC matrix + 4 tokens integration + 3 projects + 4 members + 4 config). Live smoke: create project (auto-OWNER) → create 2 phases → duplicate phase (409) → reorder phases (verified by order swap) → body with extra field (400 VALIDATION) → register second user, add as MEMBER (201) → MEMBER tries MANAGE_MEMBERS (403). Audit rows present for every mutation.
 

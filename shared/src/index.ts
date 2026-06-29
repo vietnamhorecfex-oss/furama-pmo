@@ -10,3 +10,4 @@ export * from './schemas/comment';
 export * from './schemas/budget';
 export * from './schemas/milestone';
 export * from './schemas/dashboard';
+export * from './schemas/audit';

@@ -38,8 +38,8 @@ async function main(): Promise<void> {
   const prisma = new PrismaService();
   await prisma.$connect();
 
-  const audit = new AuditService(prisma);
   const rbac = new RbacService(prisma);
+  const audit = new AuditService(prisma, rbac);
   const importer = new ImportExportService(prisma, audit, rbac);
 
   console.log(`[seed] connecting to DB…`);

@@ -86,6 +86,34 @@ LEAD can `setStatus` only when every task in `criteria.taskIds` belongs to a wor
 - `_sum` and `_count` on groupBy rows are typed as possibly-undefined; helpers `countAll()` and `r._sum?.x ?? 0n` keep TS happy without runtime cost.
 - Nullable JSON field updates need `Prisma.JsonNull` (not literal `null`).
 
+## 2026-06-29 — M6 audit feed + admin UI
+
+### Activity feed RBAC
+- OWNER / PM see the full project audit feed.
+- LEAD is scoped: only Task rows in their workstreams + Comment rows. We resolve the LEAD's
+  task ids once per call (cheap on project sizes ≤ 1k) and apply them via an `OR` in the
+  Prisma where clause. Per-row Comment scoping would require an extra lookup per row — for
+  v1 we allow Comment rows broadly inside the project and revisit if it becomes an issue.
+- MEMBER / VIEWER → 403 outright (matches the capability matrix).
+
+### AuditService dependencies
+AuditService now injects RbacService so `feed()` / `entityHistory()` can resolve the caller's
+effective role and LEAD scope. The new dependency is added in seed.ts manual instantiation
+order (rbac before audit). No new tests broke; integration helpers use Nest DI so they auto-
+resolve.
+
+### Web admin shell
+Added 4 view tabs: **Activity**, **Team**, **Settings**, **Import / Export**. All gated by
+the server's existing RBAC; the UI surfaces 400/403/409 messages inline without hiding
+controls, so it's obvious why an action failed (e.g. last-OWNER guard, referential-integrity
+on phase delete).
+
+## Gate M6 — verified DONE
+`pnpm typecheck` clean · web build 324 KB / gzip 100 KB · live: as seed admin (OWNER) the
+activity feed returns 11 rows with `actorName`; the entity-history sub-route returns the
+per-Task trail. As a freshly-promoted MEMBER on the same project, GET /activity returns
+**HTTP 403 "Role MEMBER cannot view the audit log"** — exactly the capability matrix.
+
 ## Gate M5 — verified DONE
 `pnpm typecheck` clean · `pnpm test` **116 passed** (added 2 budget + 2 milestone + 1 dashboard integration). Live on the seed project: `/budget/summary` returns `{capVnd:0, plannedVnd:0, committedVnd:2_241_700_000, actual:0, overCap:false, byCategory:1, byWorkstream:3, overruns:0}`; `/dashboard` returns full 628-task health (`COMPLETED:3, IN_PROGRESS:1, NOT_STARTED:624, byPriority CRITICAL:397/HIGH:212/MEDIUM:19`), 3 workstreams breakdown, 12 upcoming-deadline rows; created a gate with 3 task criteria → readiness `67%` (2/3 done from prior runs).
 

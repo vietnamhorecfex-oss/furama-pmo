@@ -15,8 +15,15 @@ import { TaskDrawer } from '../features/tasks/TaskDrawer';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { BudgetPanel } from '../features/budget/BudgetPanel';
 import { GatesPanel } from '../features/milestones/GatesPanel';
+import { ActivityFeed } from '../features/activity/ActivityFeed';
+import { TeamPage } from '../features/team/TeamPage';
+import { SettingsPage } from '../features/settings/SettingsPage';
+import { ImportExportPanel } from '../features/io/ImportExportPanel';
 
-type View = 'dashboard' | 'table' | 'board' | 'budget' | 'gates';
+type View =
+  | 'dashboard' | 'table' | 'board'
+  | 'budget' | 'gates'
+  | 'activity' | 'team' | 'settings' | 'io';
 
 export function App() {
   const token = useAuth((s) => s.accessToken);
@@ -73,36 +80,24 @@ function Workspace({ userEmail }: { userEmail: string }) {
             </button>
           </div>
         </div>
-        <div className="max-w-7xl mx-auto px-4 pb-2 flex gap-2">
-          {(['dashboard', 'table', 'board', 'budget', 'gates'] as View[]).map((v) => (
+        <div className="max-w-7xl mx-auto px-4 pb-2 flex gap-1.5 flex-wrap">
+          {(['dashboard', 'table', 'board', 'budget', 'gates', 'activity', 'team', 'settings', 'io'] as View[]).map((v) => (
             <button
               key={v}
               type="button"
               onClick={() => setView(v)}
-              className={`px-3 py-1.5 text-sm rounded capitalize ${
+              className={`px-3 py-1.5 text-sm rounded ${
                 view === v ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              {v}
+              {VIEW_LABELS[v]}
             </button>
           ))}
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-4">
-        {projectId ? (
-          view === 'dashboard' ? (
-            <DashboardPage projectId={projectId} />
-          ) : view === 'table' ? (
-            <TasksTable projectId={projectId} onOpen={(id) => setOpenTaskId(id)} />
-          ) : view === 'board' ? (
-            <KanbanBoard projectId={projectId} onOpen={(id) => setOpenTaskId(id)} />
-          ) : view === 'budget' ? (
-            <BudgetPanel projectId={projectId} />
-          ) : (
-            <GatesPanel projectId={projectId} />
-          )
-        ) : (
+        {projectId ? renderView(view, projectId, setOpenTaskId) : (
           <p className="text-slate-500">Select a project to begin.</p>
         )}
       </main>
@@ -110,4 +105,34 @@ function Workspace({ userEmail }: { userEmail: string }) {
       {openTaskId && <TaskDrawer taskId={openTaskId} onClose={() => setOpenTaskId(null)} />}
     </div>
   );
+}
+
+const VIEW_LABELS: Record<View, string> = {
+  dashboard: 'Dashboard',
+  table: 'Tasks',
+  board: 'Board',
+  budget: 'Budget',
+  gates: 'Gates',
+  activity: 'Activity',
+  team: 'Team',
+  settings: 'Settings',
+  io: 'Import / Export',
+};
+
+function renderView(
+  view: View,
+  projectId: string,
+  setOpenTaskId: (id: string) => void,
+): JSX.Element {
+  switch (view) {
+    case 'dashboard': return <DashboardPage projectId={projectId} />;
+    case 'table': return <TasksTable projectId={projectId} onOpen={setOpenTaskId} />;
+    case 'board': return <KanbanBoard projectId={projectId} onOpen={setOpenTaskId} />;
+    case 'budget': return <BudgetPanel projectId={projectId} />;
+    case 'gates': return <GatesPanel projectId={projectId} />;
+    case 'activity': return <ActivityFeed projectId={projectId} />;
+    case 'team': return <TeamPage projectId={projectId} />;
+    case 'settings': return <SettingsPage projectId={projectId} />;
+    case 'io': return <ImportExportPanel projectId={projectId} />;
+  }
 }

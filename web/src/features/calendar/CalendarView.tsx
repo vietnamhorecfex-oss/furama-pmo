@@ -5,7 +5,7 @@
  */
 import { useState, useMemo } from 'react';
 import type { TaskDto, TaskStatus } from '@furama/shared';
-import { useTasks } from '../tasks/useTasks';
+import { useAllTasks } from '../tasks/useTasks';
 import { useI18n } from '../../lib/i18n';
 
 const STATUS_CHIP: Record<TaskStatus, string> = {
@@ -43,9 +43,9 @@ export function CalendarView({ projectId, onOpen }: Props) {
   const [month, setMonth] = useState(today.getMonth()); // 0-indexed
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-  // Fetch tasks for a large window; filter client-side to month
-  const list = useTasks(projectId, { page: 1, pageSize: 500, sort: 'deadline', order: 'asc' });
-  const tasks: TaskDto[] = list.data?.data ?? [];
+  // Fetch all tasks (paged in chunks of 100); filter client-side to the month
+  const list = useAllTasks(projectId, { sort: 'deadline', order: 'asc' });
+  const tasks: TaskDto[] = list.data?.tasks ?? [];
 
   // Build calendar grid: 6 rows × 7 cols
   const firstDay = startOfMonth(year, month);

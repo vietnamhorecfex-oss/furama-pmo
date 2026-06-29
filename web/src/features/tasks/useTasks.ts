@@ -21,6 +21,45 @@ export function useTasks(projectId: string | undefined, query: Partial<ListTasks
   });
 }
 
+/**
+ * Fetch every task for a project for views that need the whole set (Board, Calendar).
+ * The list API caps pageSize at 100, so we page through in chunks of 100 (page 1 first
+ * to learn the total, then the rest in parallel) up to `cap` items. The query key is
+ * prefixed with ['tasks', projectId, …] so WS task events invalidate it like the table.
+ */
+export function useAllTasks(
+  projectId: string | undefined,
+  opts?: { sort?: string; order?: 'asc' | 'desc'; cap?: number },
+) {
+  const sort = opts?.sort ?? 'code';
+  const order = opts?.order ?? 'asc';
+  const cap = opts?.cap ?? 2000;
+  return useQuery({
+    enabled: !!projectId,
+    queryKey: ['tasks', projectId, 'all', sort, order, cap],
+    queryFn: async (): Promise<{ tasks: TaskDto[]; total: number; truncated: boolean }> => {
+      const pageSize = 100;
+      const fetchPage = async (page: number) => {
+        const { data } = await api.get<Paginated<TaskDto>>(`/projects/${projectId}/tasks`, {
+          params: { page, pageSize, sort, order },
+        });
+        return data;
+      };
+      const first = await fetchPage(1);
+      const tasks = [...first.data];
+      const wanted = Math.min(first.total, cap);
+      const pages = Math.ceil(wanted / pageSize);
+      if (pages > 1) {
+        const rest = await Promise.all(
+          Array.from({ length: pages - 1 }, (_, i) => fetchPage(i + 2)),
+        );
+        for (const r of rest) tasks.push(...r.data);
+      }
+      return { tasks, total: first.total, truncated: first.total > wanted };
+    },
+  });
+}
+
 export function useTask(taskId: string | undefined) {
   return useQuery({
     enabled: !!taskId,

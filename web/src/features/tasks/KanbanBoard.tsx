@@ -5,7 +5,7 @@
  */
 import { useState } from 'react';
 import type { TaskDto, TaskStatus } from '@furama/shared';
-import { useTasks, useUpdateProgress } from './useTasks';
+import { useAllTasks, useUpdateProgress } from './useTasks';
 import { useI18n } from '../../lib/i18n';
 
 interface Props {
@@ -22,7 +22,7 @@ const PRIORITY_BADGE: Record<string, string> = {
 
 export function KanbanBoard({ projectId, onOpen }: Props) {
   const { t } = useI18n();
-  const list = useTasks(projectId, { page: 1, pageSize: 500, sort: 'code', order: 'asc' });
+  const list = useAllTasks(projectId, { sort: 'code', order: 'asc' });
   const update = useUpdateProgress(projectId);
   const [dragId, setDragId] = useState<string | null>(null);
   const [draggingOver, setDraggingOver] = useState<TaskStatus | null>(null);
@@ -38,9 +38,9 @@ export function KanbanBoard({ projectId, onOpen }: Props) {
   const byStatus: Record<TaskStatus, TaskDto[]> = {
     NOT_STARTED: [], IN_PROGRESS: [], IN_REVIEW: [], BLOCKED: [], COMPLETED: [],
   };
-  for (const task of list.data?.data ?? []) byStatus[task.status].push(task);
+  for (const task of list.data?.tasks ?? []) byStatus[task.status].push(task);
 
-  const truncated = list.data && list.data.total > 500;
+  const truncated = list.data?.truncated ?? false;
   const isLive = !list.isFetching && !list.isLoading;
 
   return (

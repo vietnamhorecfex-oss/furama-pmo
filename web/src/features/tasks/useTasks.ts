@@ -86,6 +86,27 @@ export function useUpdateProgress(projectId: string | undefined) {
   });
 }
 
+/**
+ * Edit task fields (budget, actual, etc.) via PATCH /tasks/:id (EDIT_TASK). Budget changes
+ * roll up to committed/actual on the Budget screen, so we also refresh budget + dashboard.
+ */
+export function useUpdateTask(projectId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { taskId: string; payload: Partial<Pick<TaskDto, 'budgetVnd' | 'actualVnd'>> }) => {
+      const { data } = await api.patch<TaskDto>(`/tasks/${vars.taskId}`, vars.payload);
+      return data;
+    },
+    onSuccess: (task) => {
+      qc.setQueryData(['task', task.id], task);
+      qc.invalidateQueries({ queryKey: ['tasks', projectId] });
+      qc.invalidateQueries({ queryKey: ['task-history', task.id] });
+      qc.invalidateQueries({ queryKey: ['budget', projectId] });
+      qc.invalidateQueries({ queryKey: ['dashboard', projectId] });
+    },
+  });
+}
+
 /** Full audit trail for one task (status/percent/note changes), newest first. */
 export function useTaskHistory(projectId: string | undefined, taskId: string | undefined) {
   return useQuery({

@@ -5,10 +5,11 @@
  */
 import { useEffect, useState } from 'react';
 import type { AuditLogDto, TaskDto, TaskStatus } from '@furama/shared';
-import { useTask, useTaskHistory, useUpdateProgress } from './useTasks';
+import { useTask, useTaskHistory, useUpdateProgress, useUpdateTask } from './useTasks';
 import { useAddComment, useComments } from '../comments/useComments';
 import { useI18n } from '../../lib/i18n';
 import { usePermissions } from '../../lib/permissions';
+import { formatVnd, formatVndFull } from '../../lib/format';
 
 interface Props {
   taskId: string;
@@ -70,6 +71,7 @@ export function TaskDrawer({ taskId, onClose }: Props) {
         <div className="flex-1 overflow-auto p-4 space-y-5">
           {data && <TaskFacts t={data} i18n={t} />}
           {data && can('UPDATE_PROGRESS') && <ProgressEditor task={data} i18n={t} />}
+          {data && <TaskBudgetEditor task={data} canEdit={can('EDIT_TASK')} i18n={t} />}
           {data && <HistoryTimeline projectId={data.projectId} taskId={taskId} i18n={t} />}
 
           <section>
@@ -115,6 +117,56 @@ export function TaskDrawer({ taskId, onClose }: Props) {
         </div>
       </aside>
     </div>
+  );
+}
+
+/** Per-task budget allocation. Saving rolls up to Committed on the Budget tab. */
+function TaskBudgetEditor({ task, canEdit, i18n }: { task: TaskDto; canEdit: boolean; i18n: ReturnType<typeof useI18n>['t'] }) {
+  const update = useUpdateTask(task.projectId);
+  const [budget, setBudget] = useState(task.budgetVnd);
+  useEffect(() => { setBudget(task.budgetVnd); }, [task.id, task.budgetVnd]);
+
+  const dirty = budget !== task.budgetVnd;
+  const save = () => { if (dirty) update.mutate({ taskId: task.id, payload: { budgetVnd: Math.max(0, Math.trunc(budget)) } }); };
+
+  return (
+    <section className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+      <h3 className="text-sm font-semibold text-slate-700 mb-2">{i18n.taskBudgetTitle}</h3>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mb-2">
+        <div>
+          <dt className="text-xs uppercase text-slate-500 tracking-wide">{i18n.linkedCategory}</dt>
+          <dd className="text-slate-800">{task.category ?? '—'}</dd>
+        </div>
+      </dl>
+      {canEdit ? (
+        <div className="flex items-end gap-2 flex-wrap">
+          <label className="text-xs text-slate-500">
+            <span className="block mb-0.5">{i18n.budgetAllocated}</span>
+            <input
+              type="number" min={0} step={1_000_000}
+              value={budget}
+              disabled={update.isPending}
+              onChange={(e) => setBudget(Number(e.target.value))}
+              onKeyDown={(e) => { if (e.key === 'Enter') save(); }}
+              className="w-44 rounded border border-slate-300 px-2 py-1 text-sm tabular-nums bg-white"
+            />
+          </label>
+          <span className="text-xs text-slate-400 pb-1.5" title={formatVndFull(budget)}>{formatVnd(budget)}</span>
+          <button
+            type="button"
+            onClick={save}
+            disabled={!dirty || update.isPending}
+            className="rounded bg-indigo-600 text-white text-sm px-3 py-1.5 disabled:opacity-50 ml-auto"
+          >
+            {update.isPending ? i18n.savingProgress : i18n.save}
+          </button>
+        </div>
+      ) : (
+        <p className="text-sm text-slate-700">{i18n.budgetAllocated}: <span className="font-semibold">{formatVnd(task.budgetVnd)}</span></p>
+      )}
+      <p className="text-[11px] text-slate-400 mt-1.5">↳ {i18n.rollupHint}</p>
+      {update.isError && <ErrMsg error={update.error} fallback={i18n.error} />}
+    </section>
   );
 }
 

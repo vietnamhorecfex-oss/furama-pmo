@@ -6,7 +6,8 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useBudgetSummary } from '../dashboard/useDashboard';
-import { useSetBudgetCap, useSetCategoryPlanned, useImportBudget } from './useBudget';
+import { useSetBudgetCap, useSetCategoryAmounts, useImportBudget } from './useBudget';
+import type { BudgetCategorySummary } from '@furama/shared';
 import { downloadBudgetCsv, parseBudgetCsv } from './budgetCsv';
 import { formatVnd, formatVndFull } from '../../lib/format';
 import { useI18n } from '../../lib/i18n';
@@ -22,7 +23,7 @@ export function BudgetPanel({ projectId }: Props) {
   const { can } = usePermissions(projectId);
   const canEdit = can('MANAGE_BUDGET');
   const setCap = useSetBudgetCap(projectId);
-  const setPlanned = useSetCategoryPlanned(projectId);
+  const setCategory = useSetCategoryAmounts(projectId);
   const importBudget = useImportBudget(projectId);
   const fileRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState('');
@@ -221,47 +222,17 @@ export function BudgetPanel({ projectId }: Props) {
         </div>
 
         <ul className="space-y-3">
-          {visibleCats.map((c) => {
-            const isOverrun = overrunIds.has(c.categoryId);
-            const max = Math.max(c.plannedVnd, c.committedVnd, 1);
-            const util = c.plannedVnd > 0 ? (c.committedVnd / c.plannedVnd) * 100 : 0;
-            return (
-              <li key={c.categoryId}>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-800">
-                    {c.name}
-                    {isOverrun ? (
-                      <span className="ml-2 text-xs rounded-full bg-amber-100 text-amber-800 px-1.5 py-0.5">
-                        {t.overrun}
-                      </span>
-                    ) : (
-                      <span className="ml-2 text-xs rounded-full bg-emerald-50 text-emerald-700 px-1.5 py-0.5">
-                        {util.toFixed(0)}%
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-slate-500 tabular-nums flex items-center gap-1">
-                    <span title={formatVndFull(c.committedVnd)}>{formatVnd(c.committedVnd)}</span>
-                    <span className="text-slate-400">/</span>
-                    <EditableAmount
-                      value={c.plannedVnd}
-                      canEdit={canEdit}
-                      pending={setPlanned.isPending}
-                      onSave={(v) => setPlanned.mutate({ categoryId: c.categoryId, plannedVnd: v })}
-                      className="text-slate-500"
-                    />
-                  </span>
-                </div>
-                <div className="mt-1 grid grid-cols-1 gap-1">
-                  <Bar fill="bg-slate-300" pct={(c.plannedVnd / max) * 100} label={t.planned} />
-                  <Bar fill={isOverrun ? 'bg-red-500' : 'bg-indigo-500'} pct={(c.committedVnd / max) * 100} label={t.committed} />
-                  {c.actualVnd > 0 && (
-                    <Bar fill="bg-emerald-600" pct={(c.actualVnd / max) * 100} label={t.actual} />
-                  )}
-                </div>
-              </li>
-            );
-          })}
+          {visibleCats.map((c) => (
+            <CategoryRow
+              key={c.categoryId}
+              c={c}
+              isOverrun={overrunIds.has(c.categoryId)}
+              canEdit={canEdit}
+              pending={setCategory.isPending}
+              onSave={(plannedVnd, actualVnd) => setCategory.mutate({ categoryId: c.categoryId, plannedVnd, actualVnd })}
+              t={t}
+            />
+          ))}
           {filteredCats.length === 0 && (
             <li className="text-sm text-slate-400">{t.noCategoriesConfigured}</li>
           )}
@@ -278,6 +249,89 @@ export function BudgetPanel({ projectId }: Props) {
         )}
       </div>
     </div>
+  );
+}
+
+/** One category row: bars + amounts; click Edit to change Planned & Actual, then Save. */
+function CategoryRow({
+  c, isOverrun, canEdit, pending, onSave, t,
+}: {
+  c: BudgetCategorySummary;
+  isOverrun: boolean;
+  canEdit: boolean;
+  pending: boolean;
+  onSave: (plannedVnd: number, actualVnd: number) => void;
+  t: ReturnType<typeof useI18n>['t'];
+}) {
+  const [editing, setEditing] = useState(false);
+  const [planned, setPlanned] = useState(c.plannedVnd);
+  const [actual, setActual] = useState(c.actualVnd);
+  useEffect(() => { setPlanned(c.plannedVnd); setActual(c.actualVnd); }, [c.plannedVnd, c.actualVnd]);
+
+  const max = Math.max(c.plannedVnd, c.committedVnd, c.actualVnd, 1);
+  const util = c.plannedVnd > 0 ? (c.committedVnd / c.plannedVnd) * 100 : 0;
+
+  function save() {
+    onSave(Math.max(0, Math.trunc(planned)), Math.max(0, Math.trunc(actual)));
+    setEditing(false);
+  }
+
+  return (
+    <li className="rounded-lg border border-transparent hover:border-slate-100 hover:bg-slate-50/40 px-1 py-1">
+      <div className="flex justify-between items-center text-sm gap-2">
+        <span className="text-slate-800">
+          {c.name}
+          {isOverrun ? (
+            <span className="ml-2 text-xs rounded-full bg-amber-100 text-amber-800 px-1.5 py-0.5">{t.overrun}</span>
+          ) : (
+            <span className="ml-2 text-xs rounded-full bg-emerald-50 text-emerald-700 px-1.5 py-0.5">{util.toFixed(0)}%</span>
+          )}
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="text-slate-500 tabular-nums" title={`${formatVndFull(c.committedVnd)} / ${formatVndFull(c.plannedVnd)}`}>
+            {formatVnd(c.committedVnd)} / {formatVnd(c.plannedVnd)}
+          </span>
+          {canEdit && !editing && (
+            <button type="button" onClick={() => setEditing(true)}
+              className="text-xs text-indigo-600 hover:text-indigo-800 border border-slate-200 rounded px-2 py-0.5">
+              {t.edit}
+            </button>
+          )}
+        </span>
+      </div>
+
+      {editing ? (
+        <div className="mt-2 flex flex-wrap items-end gap-3 bg-white border border-indigo-100 rounded-lg p-2">
+          <label className="text-xs text-slate-500">
+            <span className="block mb-0.5">{t.planned}</span>
+            <input type="number" min={0} step={1_000_000} value={planned} disabled={pending}
+              onChange={(e) => setPlanned(Number(e.target.value))}
+              className="w-40 rounded border border-slate-300 px-2 py-1 text-sm tabular-nums" />
+          </label>
+          <label className="text-xs text-slate-500">
+            <span className="block mb-0.5">{t.actual}</span>
+            <input type="number" min={0} step={1_000_000} value={actual} disabled={pending} autoFocus
+              onChange={(e) => setActual(Number(e.target.value))}
+              onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
+              className="w-40 rounded border border-slate-300 px-2 py-1 text-sm tabular-nums" />
+          </label>
+          <div className="flex gap-2 ml-auto">
+            <button type="button" onClick={() => { setEditing(false); setPlanned(c.plannedVnd); setActual(c.actualVnd); }}
+              className="rounded border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50">{t.cancel}</button>
+            <button type="button" onClick={save} disabled={pending}
+              className="rounded bg-indigo-600 text-white px-3 py-1 text-sm disabled:opacity-60">
+              {pending ? t.savingProgress : t.save}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-1 grid grid-cols-1 gap-1">
+          <Bar fill="bg-slate-300" pct={(c.plannedVnd / max) * 100} label={t.planned} />
+          <Bar fill={isOverrun ? 'bg-red-500' : 'bg-indigo-500'} pct={(c.committedVnd / max) * 100} label={t.committed} />
+          <Bar fill="bg-emerald-600" pct={(c.actualVnd / max) * 100} label={`${t.actual} ${formatVnd(c.actualVnd)}`} />
+        </div>
+      )}
+    </li>
   );
 }
 

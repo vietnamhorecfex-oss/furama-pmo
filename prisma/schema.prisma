@@ -217,6 +217,7 @@ model BudgetCategory {
   name       String
   ownerLabel String?
   plannedVnd BigInt  @default(0)
+  actualVnd  BigInt  @default(0)
   order      Int     @default(0)
   tasks      Task[]
   @@unique([projectId, name])

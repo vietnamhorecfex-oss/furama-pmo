@@ -38,8 +38,9 @@ describe('BudgetService.summary (M5 integration)', () => {
     const ws = await deps.prisma.workstream.create({
       data: { projectId: p.id, name: 'Marketing', track: 'MARKETING' },
     });
+    // actual is managed on the category (manual entry), not rolled up from tasks.
     const branding = await deps.prisma.budgetCategory.create({
-      data: { projectId: p.id, name: 'Branding', plannedVnd: 80n, order: 0 },
+      data: { projectId: p.id, name: 'Branding', plannedVnd: 80n, actualVnd: 50n, order: 0 },
     });
     const ads = await deps.prisma.budgetCategory.create({
       data: { projectId: p.id, name: 'Ads', plannedVnd: 0n, order: 1 },
@@ -49,9 +50,9 @@ describe('BudgetService.summary (M5 integration)', () => {
     // Uncategorized 20 → total committed = 150 > cap 100.
     await deps.prisma.task.createMany({
       data: [
-        { projectId: p.id, code: 'T1', title: 'a', workstreamId: ws.id, budgetCategoryId: branding.id, budgetVnd: 100n, actualVnd: 50n },
-        { projectId: p.id, code: 'T2', title: 'b', workstreamId: ws.id, budgetCategoryId: ads.id, budgetVnd: 30n, actualVnd: 0n },
-        { projectId: p.id, code: 'T3', title: 'c', workstreamId: ws.id, budgetVnd: 20n, actualVnd: 0n },
+        { projectId: p.id, code: 'T1', title: 'a', workstreamId: ws.id, budgetCategoryId: branding.id, budgetVnd: 100n },
+        { projectId: p.id, code: 'T2', title: 'b', workstreamId: ws.id, budgetCategoryId: ads.id, budgetVnd: 30n },
+        { projectId: p.id, code: 'T3', title: 'c', workstreamId: ws.id, budgetVnd: 20n },
       ],
     });
 

@@ -16,16 +16,29 @@ import { moneyVndSchema } from './common';
 export const setBudgetCapSchema = z.object({ capVnd: moneyVndSchema }).strict();
 export type SetBudgetCapDto = z.infer<typeof setBudgetCapSchema>;
 
-/** Update a single category's planned amount. */
-export const updateCategoryPlannedSchema = z.object({ plannedVnd: moneyVndSchema }).strict();
-export type UpdateCategoryPlannedDto = z.infer<typeof updateCategoryPlannedSchema>;
+/** Update a category's planned and/or actual amounts (at least one required). */
+export const updateCategoryAmountsSchema = z
+  .object({ plannedVnd: moneyVndSchema.optional(), actualVnd: moneyVndSchema.optional() })
+  .strict()
+  .refine((v) => v.plannedVnd !== undefined || v.actualVnd !== undefined, {
+    message: 'At least one of plannedVnd/actualVnd is required',
+  });
+export type UpdateCategoryAmountsDto = z.infer<typeof updateCategoryAmountsSchema>;
 
-/** Bulk budget import: set the cap and/or update planned amounts per category by name. */
+/** Bulk budget import: set the cap and/or update planned (+optional actual) per category by name. */
 export const budgetImportSchema = z
   .object({
     capVnd: moneyVndSchema.optional(),
     rows: z
-      .array(z.object({ name: z.string().trim().min(1).max(120), plannedVnd: moneyVndSchema }).strict())
+      .array(
+        z
+          .object({
+            name: z.string().trim().min(1).max(120),
+            plannedVnd: moneyVndSchema,
+            actualVnd: moneyVndSchema.optional(),
+          })
+          .strict(),
+      )
       .max(2000),
   })
   .strict();

@@ -26,13 +26,14 @@ export function useSetBudgetCap(projectId: string | undefined) {
   });
 }
 
-export function useSetCategoryPlanned(projectId: string | undefined) {
+export function useSetCategoryAmounts(projectId: string | undefined) {
   const refresh = useBudgetInvalidation(projectId);
   return useMutation({
-    mutationFn: async (vars: { categoryId: string; plannedVnd: number }): Promise<BudgetSummary> => {
+    mutationFn: async (vars: { categoryId: string; plannedVnd?: number; actualVnd?: number }): Promise<BudgetSummary> => {
+      const { categoryId, ...amounts } = vars;
       const { data } = await api.patch<BudgetSummary>(
-        `/projects/${projectId}/budget/categories/${vars.categoryId}/planned`,
-        { plannedVnd: vars.plannedVnd },
+        `/projects/${projectId}/budget/categories/${categoryId}`,
+        amounts,
       );
       return data;
     },

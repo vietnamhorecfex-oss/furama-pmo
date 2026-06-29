@@ -37,21 +37,29 @@ export function downloadBudgetCsv(b: BudgetSummary, filename = 'budget.csv'): vo
  *  exported 5-column shape or a minimal 2-column Category,Planned file. */
 export function parseBudgetCsv(text: string): BudgetImportDto {
   const clean = text.replace(/^﻿/, '');
-  const rows: { name: string; plannedVnd: number }[] = [];
+  const rows: { name: string; plannedVnd: number; actualVnd?: number }[] = [];
   let capVnd: number | undefined;
+
+  const num = (raw: string | undefined): number | undefined => {
+    const s = (raw ?? '').trim();
+    if (s === '') return undefined;
+    const n = Number(s.replace(/[^\d-]/g, ''));
+    return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : undefined;
+  };
 
   const lines = clean.split(/\r?\n/).filter((l) => l.trim().length > 0);
   for (let i = 0; i < lines.length; i++) {
     const cells = splitCsvLine(lines[i]);
     const name = (cells[0] ?? '').trim();
     if (!name) continue;
-    // Skip a header row (non-numeric Planned).
     const plannedRaw = (cells[1] ?? '').trim();
-    const planned = Number(plannedRaw.replace(/[^\d-]/g, ''));
-    if (!Number.isFinite(planned)) continue;
-    if (i === 0 && !/^\d/.test(plannedRaw)) continue; // header like "Planned"
-    if (name === CAP_SENTINEL) { capVnd = Math.max(0, planned); continue; }
-    rows.push({ name, plannedVnd: Math.max(0, Math.trunc(planned)) });
+    if (i === 0 && !/^\d/.test(plannedRaw)) continue; // header row like "Planned"
+    const planned = num(plannedRaw);
+    if (planned === undefined) continue;
+    if (name === CAP_SENTINEL) { capVnd = planned; continue; }
+    // Column order: Category, Planned, Committed, Actual, Utilization% → actual is cell[3].
+    const actual = num(cells[3]);
+    rows.push({ name, plannedVnd: planned, ...(actual !== undefined ? { actualVnd: actual } : {}) });
   }
   return capVnd !== undefined ? { capVnd, rows } : { rows };
 }

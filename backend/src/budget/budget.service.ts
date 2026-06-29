@@ -40,15 +40,36 @@ export class BudgetService {
     return this.summary(ctx, projectId);
   }
 
-  /** Update a single category's planned amount. Requires MANAGE_BUDGET. */
-  async setCategoryPlanned(ctx: AuthContext, projectId: string, categoryId: string, plannedVnd: number, ip: string | null): Promise<BudgetSummary> {
+  /** Update a category's planned and/or actual amounts. Requires MANAGE_BUDGET. */
+  async setCategoryAmounts(
+    ctx: AuthContext,
+    projectId: string,
+    categoryId: string,
+    amounts: { plannedVnd?: number; actualVnd?: number },
+    ip: string | null,
+  ): Promise<BudgetSummary> {
     await this.rbac.assertCan(ctx, 'MANAGE_BUDGET', projectId);
-    const cat = await this.prisma.budgetCategory.findFirst({ where: { id: categoryId, projectId }, select: { id: true, plannedVnd: true, name: true } });
+    const cat = await this.prisma.budgetCategory.findFirst({
+      where: { id: categoryId, projectId },
+      select: { id: true, name: true, plannedVnd: true, actualVnd: true },
+    });
     if (!cat) throw new NotFoundException('Budget category not found');
-    await this.prisma.budgetCategory.update({ where: { id: categoryId }, data: { plannedVnd: BigInt(plannedVnd) } });
+    await this.prisma.budgetCategory.update({
+      where: { id: categoryId },
+      data: {
+        ...(amounts.plannedVnd !== undefined ? { plannedVnd: BigInt(amounts.plannedVnd) } : {}),
+        ...(amounts.actualVnd !== undefined ? { actualVnd: BigInt(amounts.actualVnd) } : {}),
+      },
+    });
     await this.audit.record(
       { actorId: ctx.userId, projectId, ip },
-      { action: 'budget.plannedSet', entityType: 'BudgetCategory', entityId: categoryId, before: { plannedVnd: Number(cat.plannedVnd) }, after: { name: cat.name, plannedVnd } },
+      {
+        action: 'budget.categorySet',
+        entityType: 'BudgetCategory',
+        entityId: categoryId,
+        before: { plannedVnd: Number(cat.plannedVnd), actualVnd: Number(cat.actualVnd) },
+        after: { name: cat.name, ...amounts },
+      },
     );
     return this.summary(ctx, projectId);
   }
@@ -66,12 +87,16 @@ export class BudgetService {
 
     for (const row of dto.rows) {
       const id = idByName.get(row.name.toLowerCase());
+      const actualData = row.actualVnd !== undefined ? { actualVnd: BigInt(row.actualVnd) } : {};
       if (id) {
-        await this.prisma.budgetCategory.update({ where: { id }, data: { plannedVnd: BigInt(row.plannedVnd) } });
+        await this.prisma.budgetCategory.update({
+          where: { id },
+          data: { plannedVnd: BigInt(row.plannedVnd), ...actualData },
+        });
         result.updated++;
       } else {
         const created = await this.prisma.budgetCategory.create({
-          data: { projectId, name: row.name, plannedVnd: BigInt(row.plannedVnd), order: order++ },
+          data: { projectId, name: row.name, plannedVnd: BigInt(row.plannedVnd), ...actualData, order: order++ },
         });
         idByName.set(row.name.toLowerCase(), created.id);
         result.created++;
@@ -133,7 +158,9 @@ export class BudgetService {
       const agg = taskAggByCat.get(c.id) ?? { committed: 0n, actual: 0n };
       const plannedVnd = Number(c.plannedVnd);
       const committedVnd = Number(agg.committed);
-      const actualVnd = Number(agg.actual);
+      // Actual spend is managed directly on the category (manual entry on the Budget screen),
+      // not rolled up from tasks.
+      const actualVnd = Number(c.actualVnd);
       const utilization = plannedVnd === 0 ? 0 : committedVnd / plannedVnd;
       return { categoryId: c.id, name: c.name, plannedVnd, committedVnd, actualVnd, utilization };
     });

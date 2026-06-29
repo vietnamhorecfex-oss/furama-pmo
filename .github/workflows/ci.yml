@@ -11,6 +11,7 @@ env:
   JWT_ACCESS_SECRET: ci-test-secret-key-at-least-32-characters
   WEB_ORIGIN: http://localhost:5173
   NODE_ENV: test
+  # AI_MODEL_REASONING left unset; ANTHROPIC_API_KEY not set in CI so AI endpoints degrade gracefully
 
 jobs:
   # ──────────────────────────────────────────────────────────────────────────

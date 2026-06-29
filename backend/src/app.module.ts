@@ -23,6 +23,7 @@ import { RealtimeModule } from './realtime/realtime.module';
 import { BudgetModule } from './budget/budget.module';
 import { MilestonesModule } from './milestones/milestones.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { AiModule } from './ai/ai.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     BudgetModule,
     MilestonesModule,
     DashboardModule,
+    AiModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

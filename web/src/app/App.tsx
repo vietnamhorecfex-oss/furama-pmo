@@ -19,11 +19,12 @@ import { ActivityFeed } from '../features/activity/ActivityFeed';
 import { TeamPage } from '../features/team/TeamPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
 import { ImportExportPanel } from '../features/io/ImportExportPanel';
+import { AssistantPanel } from '../features/ai/AssistantPanel';
 
 type View =
   | 'dashboard' | 'table' | 'board'
   | 'budget' | 'gates'
-  | 'activity' | 'team' | 'settings' | 'io';
+  | 'activity' | 'team' | 'settings' | 'io' | 'ai';
 
 export function App() {
   const token = useAuth((s) => s.accessToken);
@@ -81,7 +82,7 @@ function Workspace({ userEmail }: { userEmail: string }) {
           </div>
         </div>
         <div className="max-w-7xl mx-auto px-4 pb-2 flex gap-1.5 flex-wrap">
-          {(['dashboard', 'table', 'board', 'budget', 'gates', 'activity', 'team', 'settings', 'io'] as View[]).map((v) => (
+          {(['dashboard', 'table', 'board', 'budget', 'gates', 'activity', 'team', 'settings', 'io', 'ai'] as View[]).map((v) => (
             <button
               key={v}
               type="button"
@@ -117,6 +118,7 @@ const VIEW_LABELS: Record<View, string> = {
   team: 'Team',
   settings: 'Settings',
   io: 'Import / Export',
+  ai: 'AI Copilot',
 };
 
 function renderView(
@@ -134,5 +136,6 @@ function renderView(
     case 'team': return <TeamPage projectId={projectId} />;
     case 'settings': return <SettingsPage projectId={projectId} />;
     case 'io': return <ImportExportPanel projectId={projectId} />;
+    case 'ai': return <AssistantPanel projectId={projectId} />;
   }
 }

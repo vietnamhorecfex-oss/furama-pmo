@@ -96,6 +96,9 @@ model User {
   createdProjects Project[]     @relation("ProjectCreatedBy")
   createdTasks  Task[]          @relation("TaskCreatedBy")
   updatedTasks  Task[]          @relation("TaskUpdatedBy")
+  notifications Notification[]  @relation("UserNotifications")
+  aiConversations AiConversation[] @relation("UserAiConversations")
+  aiActions     AiActionLog[]   @relation("UserAiActions")
 
   @@unique([orgId, email])
   @@index([orgId])
@@ -127,6 +130,11 @@ model Project {
   tasks          Task[]
   milestones     Milestone[]
   auditLogs      AuditLog[]
+  notifications  Notification[]
+  aiConversations AiConversation[]
+  aiActions      AiActionLog[]    @relation("ProjectAiActions")
+  knowledgeDocs  KnowledgeDoc[]
+  aiSettings     AiSettings?
 
   @@index([orgId])
 }
@@ -345,4 +353,125 @@ model RefreshToken {
   createdAt    DateTime @default(now())
   @@index([userId])
   @@index([familyId])
+}
+
+// ----------------------------- M8 — AI assistant -----------------------------
+
+enum NotificationSeverity {
+  INFO
+  WARN
+  CRITICAL
+}
+
+enum NotificationChannel {
+  INAPP
+  EMAIL
+  WS
+}
+
+enum AiMessageRole {
+  USER
+  ASSISTANT
+  TOOL
+}
+
+enum AiActionStatus {
+  PROPOSED
+  CONFIRMED
+  EXECUTED
+  REJECTED
+  FAILED
+}
+
+enum KnowledgeSource {
+  PLAYBOOK
+  SOP
+  UPLOAD
+}
+
+model Notification {
+  id         String               @id @default(cuid())
+  projectId  String
+  project    Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User                 @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  type       String
+  severity   NotificationSeverity @default(INFO)
+  title      String
+  body       String
+  entityType String?
+  entityId   String?
+  channel    NotificationChannel  @default(INAPP)
+  readAt     DateTime?
+  createdAt  DateTime             @default(now())
+  @@index([userId, createdAt])
+  @@index([projectId, createdAt])
+}
+
+model AiConversation {
+  id        String      @id @default(cuid())
+  projectId String
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation("UserAiConversations", fields: [userId], references: [id], onDelete: Cascade)
+  title     String?
+  createdAt DateTime    @default(now())
+  messages  AiMessage[]
+  actions   AiActionLog[]
+  @@index([projectId, userId])
+}
+
+model AiMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           AiMessageRole
+  content        String
+  toolCalls      Json?
+  model          String?
+  tokensIn       Int?
+  tokensOut      Int?
+  createdAt      DateTime       @default(now())
+  @@index([conversationId, createdAt])
+}
+
+model AiActionLog {
+  id             String         @id @default(cuid())
+  conversationId String?
+  conversation   AiConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  userId         String
+  user           User           @relation("UserAiActions", fields: [userId], references: [id], onDelete: Cascade)
+  projectId      String
+  project        Project        @relation("ProjectAiActions", fields: [projectId], references: [id], onDelete: Cascade)
+  tool           String
+  args           Json
+  status         AiActionStatus @default(PROPOSED)
+  preview        Json?
+  result         Json?
+  createdAt      DateTime       @default(now())
+  @@index([projectId, status])
+  @@index([userId, createdAt])
+}
+
+model KnowledgeDoc {
+  id        String          @id @default(cuid())
+  projectId String
+  project   Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  source    KnowledgeSource @default(UPLOAD)
+  title     String
+  content   String
+  createdAt DateTime        @default(now())
+  @@index([projectId])
+}
+
+model AiSettings {
+  projectId          String  @id
+  project            Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  enabled            Boolean @default(true)
+  alertCron          String  @default("0 8 * * *")
+  channels           Json    @default("{\"inapp\":true,\"email\":false}")
+  modelTierReasoning String  @default("claude-sonnet-4-6")
+  modelTierCheap     String  @default("claude-haiku-4-5-20251001")
+  monthlyTokenCap    Int     @default(500000)
+  redactPii          Boolean @default(false)
 }

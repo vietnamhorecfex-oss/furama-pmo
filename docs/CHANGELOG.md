@@ -152,6 +152,53 @@ reverse proxy.
 and archival (≥1 year), zero-downtime blue/green deploy, JWT key rotation procedure, refresh
 token theft investigation, GDPR hard-delete runbook, `pnpm audit` gate.
 
+## 2026-06-29 — M8 AI Assistant (Furama Copilot)
+
+### Prisma migrations
+Added 6 new models and enums (`NotificationSeverity`, `NotificationChannel`, `AiMessageRole`,
+`AiActionStatus`, `KnowledgeSource`):
+- `Notification` — in-app / email / WS alerts per user per project
+- `AiConversation` + `AiMessage` — persisted chat history (last 20 messages used as context)
+- `AiActionLog` — PROPOSED → CONFIRMED → EXECUTED lifecycle for write-tool gating
+- `KnowledgeDoc` — keyword-searchable Playbook/SOP passages (pgvector pending; keyword fallback used)
+- `AiSettings` — per-project AI toggle, model tiers, monthly token cap, cron, channels
+
+### Backend: `backend/src/ai/`
+- `assistant.service.ts` — full Anthropic tool-use loop:
+  - Read tools (whoami, search_tasks, get_dashboard, get_budget_summary, list_overdue,
+    search_knowledge) run immediately; results returned to Claude.
+  - Write tools (update_task_progress, bulk_update_progress, shift_deadline, create_task,
+    add_comment, create_config_item, send_notification) are intercepted into `AiActionLog`
+    with status=PROPOSED; loop pauses and returns proposed preview to the caller.
+  - Mutations only happen when the user calls `POST /ai/actions/:id/confirm`.
+  - Loop max 6 iterations; tool results truncated to prevent context bloat.
+  - Graceful degradation: if `ANTHROPIC_API_KEY` is absent, returns a polite message.
+  - All tool dispatches carry `AuthContext`; RBAC enforced by underlying services.
+  - System prompt grounded in project metadata + role; safety rules inline (no prompt injection).
+- `ai.controller.ts` — 5 controller classes:
+  - `POST /projects/:pid/ai/chat` — send message → reply + optional proposed actions
+  - `POST /ai/actions/:id/confirm` — execute PROPOSED action
+  - `POST /ai/actions/:id/reject` — discard PROPOSED action
+  - `GET /projects/:pid/notifications` — list notifications (unread filter)
+  - `POST /notifications/:id/read` — mark notification read
+
+### Web: `web/src/features/ai/AssistantPanel.tsx`
+Chat UI integrated as the 10th tab ("AI Copilot") in App.tsx:
+- Message bubbles (user right / assistant left)
+- Proposed-action cards with tool name, JSON args preview, Confirm / Reject buttons
+- Confirm calls `/ai/actions/:id/confirm` and shows status chip
+- Input bar disables during pending request
+- Vietnamese default text matching the system prompt language
+
+### Key decisions
+- `ANTHROPIC_API_KEY` is optional; the app boots and serves all existing features without it.
+  The AI endpoint returns a graceful "not configured" message if the key is absent.
+- Write tools always go through the PROPOSED flow regardless of caller role — RBAC is enforced
+  at execution time (confirm step), not at proposal time. This means Claude can describe what
+  it would do even if the user doesn't confirm.
+- `ai/tools.json` is copied into `backend/src/ai/tools.json` so TypeScript `rootDir` constraint
+  is satisfied; the original in `/ai/` is the spec source of truth.
+
 ## Gate M7 — verified DONE
 `pnpm typecheck` clean · **142 tests pass, 14 suites** (+26 security HTTP tests) ·
 web build 324 KB / gzip 100 KB · security.spec: all 26 tests pass covering IDOR,

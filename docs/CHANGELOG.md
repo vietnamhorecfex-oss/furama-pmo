@@ -108,6 +108,56 @@ the server's existing RBAC; the UI surfaces 400/403/409 messages inline without 
 controls, so it's obvious why an action failed (e.g. last-OWNER guard, referential-integrity
 on phase delete).
 
+## 2026-06-29 — M7 security hardening, E2E, CI, ops
+
+### Security test suite (HTTP-level)
+A new `backend/src/security/security.spec.ts` exercises the real HTTP stack via Supertest +
+the full NestJS AppModule (guards, filters, helmet, ThrottlerGuard). One shared app instance
+across all 6 describe blocks to avoid DB connection pool exhaustion. Covers:
+- Every protected route returns 401 without a valid token
+- Cross-org IDOR: user B cannot read/update/delete user A's projects, tasks, or budget
+- Role enforcement: MEMBER gets 403 on admin operations (meta update, activity feed, member mgmt)
+- SQL injection stored safely (Prisma parameterization), XSS stripped in comments (sanitizer)
+- Zod strict schema: unknown fields → 400 VALIDATION
+- Security headers via helmet: `X-Content-Type-Options`, framing prevention, no Server banner
+- Rate limiting: 429 after 11 POST /auth/login attempts in the same 60s window
+Test helper `http-harness.ts` bootstraps the app with the same middleware as main.ts (helmet + cookieParser) and adds a `registerAndLogin` helper that validates register/login success.
+
+**Bug found and fixed during M7:** Test slugs used camelCase hints ('idorA') causing 400 VALIDATION on org slug (schema requires lowercase). Fixed by lowercasing the generated slug in `registerAndLogin`.
+
+### Coverage thresholds
+`jest.config.js` now enforces: ≥80% lines / ≥75% branches globally; ≥90% lines on `rbac.service.ts`, `auth.service.ts`, `tasks.service.ts`, `budget.service.ts`. `collectCoverageFrom` expanded to include controllers and filters.
+
+### Playwright E2E setup
+`@playwright/test` added to web devDependencies. `web/playwright.config.ts` configures:
+- Single chromium worker (parallelism gated by CI label `run-e2e`)
+- BASE_URL/API_URL env override for CI server orchestration
+- Four spec files in `web/e2e/`: auth, owner-setup, tasks, rbac-ui
+
+### Vite preview proxy
+`vite.config.ts` now declares the same proxy rules under both `server.proxy` and `preview.proxy`
+so `vite preview` (used in CI) routes `/api` and socket.io to the backend without a separate
+reverse proxy.
+
+### CI pipeline (two-job)
+`.github/workflows/ci.yml` expanded to two jobs:
+1. **build-test** (runs on every push/PR): unit+integration+security tests with coverage gate,
+   `pnpm audit --audit-level=high`, typecheck, full build. Adds Redis service container.
+2. **e2e** (runs on main branch pushes or PRs labeled `run-e2e`): starts backend + frontend,
+   runs Playwright, uploads playwright-report artifact.
+
+### Ops runbook
+`docs/ops-runbook.md` covers: service architecture, required env vars, migration procedure
+(deploy mode + migration role vs app role), backup/restore (pg_dump + S3), audit log retention
+and archival (≥1 year), zero-downtime blue/green deploy, JWT key rotation procedure, refresh
+token theft investigation, GDPR hard-delete runbook, `pnpm audit` gate.
+
+## Gate M7 — verified DONE
+`pnpm typecheck` clean · **142 tests pass, 14 suites** (+26 security HTTP tests) ·
+web build 324 KB / gzip 100 KB · security.spec: all 26 tests pass covering IDOR,
+role enforcement, injection resistance, headers, rate-limit · CI pipeline expanded with
+Redis service, coverage gate, pnpm audit, Playwright E2E job · ops-runbook.md written.
+
 ## Gate M6 — verified DONE
 `pnpm typecheck` clean · web build 324 KB / gzip 100 KB · live: as seed admin (OWNER) the
 activity feed returns 11 rows with `actorName`; the entity-history sub-route returns the

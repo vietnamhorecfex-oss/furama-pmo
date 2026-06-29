@@ -1,16 +1,24 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+const BACKEND = 'http://localhost:3000';
+
+const proxy = {
+  '/api': BACKEND,
+  '/health': BACKEND,
+  '/ready': BACKEND,
+  '/socket.io': { target: BACKEND, ws: true },
+};
+
 export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    proxy: {
-      '/api': 'http://localhost:3000',
-      '/health': 'http://localhost:3000',
-      '/ready': 'http://localhost:3000',
-      // Socket.io path used by the realtime gateway (namespace /ws).
-      '/socket.io': { target: 'http://localhost:3000', ws: true },
-    },
+    proxy,
+  },
+  // preview (vite preview after build) needs the same proxy so E2E tests work
+  preview: {
+    port: 4173,
+    proxy,
   },
 });

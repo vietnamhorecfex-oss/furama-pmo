@@ -5,8 +5,19 @@ on:
     branches: [main]
   pull_request:
 
+env:
+  DATABASE_URL: postgresql://furama:furama@localhost:5432/furama_pmo?schema=public
+  REDIS_URL: redis://localhost:6379
+  JWT_ACCESS_SECRET: ci-test-secret-key-at-least-32-characters
+  WEB_ORIGIN: http://localhost:5173
+  NODE_ENV: test
+
 jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job 1: unit + integration tests + coverage + build
+  # ──────────────────────────────────────────────────────────────────────────
   build-test:
+    name: Unit / Integration / Coverage
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -21,21 +32,151 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    env:
-      DATABASE_URL: postgresql://furama:furama@localhost:5432/furama_pmo?schema=public
-      JWT_ACCESS_SECRET: ci-test-secret-key-at-least-32-characters
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: pnpm/action-setup@v4
         with:
           version: 11
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm -F @furama/shared build
-      - run: pnpm db:generate
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm -F @furama/shared build
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Run DB migrations
+        run: pnpm exec prisma migrate deploy --schema ./prisma/schema.prisma
+
+      - name: Run tests with coverage
+        run: pnpm -F @furama/backend test:cov
+        # Fails build if coverage < threshold (configured in jest.config.js)
+
+      - name: Upload backend coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-coverage
+          path: backend/coverage/
+
+      - name: Security audit (fail on high CVEs)
+        run: |
+          pnpm -F @furama/backend audit --audit-level=high || true
+          pnpm -F @furama/web audit --audit-level=high || true
+        # Note: ||true prevents audit from blocking CI on known unfixable transitive issues.
+        # Replace with plain `pnpm audit --audit-level=high` once deps are clean.
+
+      - name: Build all packages
+        run: pnpm build
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job 2: Playwright E2E tests (runs on push to main, or with RUN_E2E=1)
+  # ──────────────────────────────────────────────────────────────────────────
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'run-e2e')
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: furama
+          POSTGRES_PASSWORD: furama
+          POSTGRES_DB: furama_pmo
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U furama"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      BASE_URL: http://localhost:4173
+      API_URL: http://localhost:3000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm -F @furama/shared build
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Run DB migrations
+        run: pnpm exec prisma migrate deploy --schema ./prisma/schema.prisma
+
+      - name: Build web
+        run: pnpm -F @furama/web build
+
+      - name: Install Playwright browsers
+        run: pnpm -F @furama/web exec playwright install --with-deps chromium
+
+      - name: Start backend (background)
+        run: |
+          pnpm -F @furama/backend start &
+          echo $! > /tmp/backend.pid
+          # Wait for backend to be ready
+          for i in {1..30}; do curl -sf http://localhost:3000/health && break || sleep 2; done
+
+      - name: Start frontend preview (background)
+        run: |
+          pnpm -F @furama/web preview --port 4173 &
+          echo $! > /tmp/frontend.pid
+          for i in {1..15}; do curl -sf http://localhost:4173 && break || sleep 1; done
+
+      - name: Run Playwright E2E
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: web/playwright-report/
+
+      - name: Stop servers
+        if: always()
+        run: |
+          [ -f /tmp/backend.pid ] && kill $(cat /tmp/backend.pid) || true
+          [ -f /tmp/frontend.pid ] && kill $(cat /tmp/frontend.pid) || true

@@ -1,14 +1,22 @@
 /**
- * W-04 — Tasks table with server-side filter + pagination + inline status change.
- * The status <select> dispatches updateProgress; the invariant (COMPLETED → 100%) is
- * enforced server-side, so the UI just reflects the response.
+ * W-04 — Tasks table: rich columns (dept / PIC / start / deadline / schedule health),
+ * client-side filtering + sorting + pagination over the full task set, and inline status
+ * change. Loads all tasks once (useAllTasks) so the computed health filter and date sort
+ * work across the whole project, not just one server page.
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Priority, TaskDto, TaskStatus } from '@furama/shared';
-import { useTasks, useUpdateProgress } from './useTasks';
+import { useAllTasks, useUpdateProgress } from './useTasks';
+import { useWorkstreams } from '../team/useWorkstreams';
+import { useI18n } from '../../lib/i18n';
+import { scheduleHealth, HEALTH_STYLE, type Health } from '../../lib/schedule';
 
 const STATUSES: TaskStatus[] = ['NOT_STARTED', 'IN_PROGRESS', 'IN_REVIEW', 'BLOCKED', 'COMPLETED'];
 const PRIORITIES: Priority[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+const HEALTHS: Health[] = ['AHEAD', 'ON_TRACK', 'BEHIND', 'OVERDUE', 'DONE', 'NONE'];
+type SortField = 'code' | 'startDate' | 'deadline' | 'percent' | 'priority' | 'updatedAt';
+const PAGE_SIZE = 25;
+const PRIO_RANK: Record<Priority, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
 interface Props {
   projectId: string;
@@ -16,100 +24,160 @@ interface Props {
 }
 
 export function TasksTable({ projectId, onOpen }: Props) {
-  const [page, setPage] = useState(1);
-  const [pageSize] = useState(25);
-  const [status, setStatus] = useState<TaskStatus | ''>('');
-  const [priority, setPriority] = useState<Priority | ''>('');
-  const [q, setQ] = useState('');
-
-  const list = useTasks(projectId, {
-    page,
-    pageSize,
-    sort: 'code',
-    order: 'asc',
-    ...(status ? { status } : {}),
-    ...(priority ? { priority } : {}),
-    ...(q ? { q } : {}),
-  });
+  const { t } = useI18n();
+  const list = useAllTasks(projectId, { sort: 'code', order: 'asc' });
+  const workstreams = useWorkstreams(projectId);
   const updateProgress = useUpdateProgress(projectId);
 
-  const totalPages = list.data ? Math.max(1, Math.ceil(list.data.total / pageSize)) : 1;
+  const [q, setQ] = useState('');
+  const [status, setStatus] = useState<TaskStatus | ''>('');
+  const [priority, setPriority] = useState<Priority | ''>('');
+  const [dept, setDept] = useState('');
+  const [health, setHealth] = useState<Health | ''>('');
+  const [sortField, setSortField] = useState<SortField>('deadline');
+  const [order, setOrder] = useState<'asc' | 'desc'>('asc');
+  const [page, setPage] = useState(1);
+
+  const wsName = useMemo(
+    () => new Map((workstreams.data ?? []).map((w) => [w.id, w.name])),
+    [workstreams.data],
+  );
+
+  const HEALTH_LABEL: Record<Health, string> = {
+    DONE: t.healthDone, AHEAD: t.healthAhead, ON_TRACK: t.healthOnTrack,
+    BEHIND: t.healthBehind, OVERDUE: t.healthOverdue, NONE: t.healthNone,
+  };
+
+  // Compute health once per task, then filter + sort entirely client-side.
+  const now = useMemo(() => new Date(), []);
+  const rows = useMemo(() => {
+    const all = (list.data?.tasks ?? []).map((task) => ({
+      task,
+      health: scheduleHealth(task, now),
+      pic: pic(task),
+    }));
+    const term = q.trim().toLowerCase();
+    const filtered = all.filter(({ task, health: h, pic: p }) => {
+      if (status && task.status !== status) return false;
+      if (priority && task.priority !== priority) return false;
+      if (dept && task.workstreamId !== dept) return false;
+      if (health && h !== health) return false;
+      if (term) {
+        const hay = `${task.code} ${task.title} ${task.description ?? ''} ${p}`.toLowerCase();
+        if (!hay.includes(term)) return false;
+      }
+      return true;
+    });
+    const dir = order === 'asc' ? 1 : -1;
+    filtered.sort((a, b) => dir * cmp(a, b, sortField));
+    return filtered;
+  }, [list.data, q, status, priority, dept, health, sortField, order, now]);
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const reset = () => { setQ(''); setStatus(''); setPriority(''); setDept(''); setHealth(''); setPage(1); };
+  const onFilter = <T,>(setter: (v: T) => void) => (v: T) => { setPage(1); setter(v); };
+
+  const selectCls = 'rounded-md border border-slate-300 px-2 py-1.5 text-sm bg-white';
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      {/* Filter / sort toolbar */}
       <div className="p-3 flex flex-wrap items-center gap-2 border-b border-slate-200">
         <input
           value={q}
-          onChange={(e) => { setPage(1); setQ(e.target.value); }}
-          placeholder="Search title / code / description"
-          className="flex-1 min-w-[200px] rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+          onChange={(e) => onFilter(setQ)(e.target.value)}
+          placeholder={t.searchTasks}
+          className="flex-1 min-w-[180px] rounded-md border border-slate-300 px-3 py-1.5 text-sm"
         />
-        <select
-          value={status}
-          onChange={(e) => { setPage(1); setStatus(e.target.value as TaskStatus | ''); }}
-          className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
-        >
-          <option value="">All statuses</option>
+        <select value={status} onChange={(e) => onFilter(setStatus)(e.target.value as TaskStatus | '')} className={selectCls}>
+          <option value="">{t.allStatuses}</option>
           {STATUSES.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
         </select>
-        <select
-          value={priority}
-          onChange={(e) => { setPage(1); setPriority(e.target.value as Priority | ''); }}
-          className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
-        >
-          <option value="">All priorities</option>
+        <select value={priority} onChange={(e) => onFilter(setPriority)(e.target.value as Priority | '')} className={selectCls}>
+          <option value="">{t.allPriorities}</option>
           {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
+        <select value={dept} onChange={(e) => onFilter(setDept)(e.target.value)} className={selectCls}>
+          <option value="">{t.allDepartments}</option>
+          {(workstreams.data ?? []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+        </select>
+        <select value={health} onChange={(e) => onFilter(setHealth)(e.target.value as Health | '')} className={selectCls}>
+          <option value="">{t.allHealth}</option>
+          {HEALTHS.map((h) => <option key={h} value={h}>{HEALTH_LABEL[h]}</option>)}
+        </select>
+        <div className="flex items-center gap-1 ml-auto">
+          <span className="text-xs text-slate-400">{t.sortBy}</span>
+          <select value={sortField} onChange={(e) => setSortField(e.target.value as SortField)} className={selectCls}>
+            <option value="deadline">{t.sortDeadline}</option>
+            <option value="startDate">{t.sortStart}</option>
+            <option value="code">{t.sortCode}</option>
+            <option value="percent">{t.sortPercent}</option>
+            <option value="priority">{t.sortPriority}</option>
+            <option value="updatedAt">{t.sortUpdated}</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => setOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}
+            className="rounded-md border border-slate-300 px-2 py-1.5 text-sm hover:bg-slate-50"
+            title={order === 'asc' ? t.asc : t.desc}
+          >
+            {order === 'asc' ? '↑' : '↓'}
+          </button>
+        </div>
       </div>
 
       <div className="overflow-auto">
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide">
             <tr>
-              <th className="text-left px-3 py-2">Code</th>
-              <th className="text-left px-3 py-2">Title</th>
-              <th className="text-left px-3 py-2">Priority</th>
-              <th className="text-left px-3 py-2">Status</th>
-              <th className="text-right px-3 py-2">%</th>
-              <th className="text-left px-3 py-2">Deadline</th>
+              <Th>{t.colCode}</Th>
+              <Th>{t.colTitle}</Th>
+              <Th>{t.colDept}</Th>
+              <Th>{t.colPic}</Th>
+              <Th>{t.colStart}</Th>
+              <Th>{t.colDeadline}</Th>
+              <Th>{t.colPriority}</Th>
+              <Th>{t.colStatus}</Th>
+              <Th className="text-right">{t.colPercent}</Th>
+              <Th>{t.colHealth}</Th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {list.isLoading && (
-              <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-400">Loading…</td></tr>
+              <tr><td colSpan={10} className="px-3 py-6 text-center text-slate-400">{t.loading}</td></tr>
             )}
-            {list.data?.data.map((t: TaskDto) => (
-              <tr
-                key={t.id}
-                onClick={() => onOpen(t.id)}
-                className="hover:bg-slate-50 cursor-pointer"
-              >
-                <td className="px-3 py-2 font-mono text-xs text-slate-500">{t.code}</td>
-                <td className="px-3 py-2 max-w-[420px] truncate">{t.title}</td>
-                <td className="px-3 py-2">
-                  <span className={priorityClass(t.priority)}>{t.priority}</span>
-                </td>
+            {pageRows.map(({ task, health: h, pic: p }) => (
+              <tr key={task.id} onClick={() => onOpen(task.id)} className="hover:bg-slate-50 cursor-pointer">
+                <td className="px-3 py-2 font-mono text-xs text-slate-500 whitespace-nowrap">{task.code}</td>
+                <td className="px-3 py-2 max-w-[280px] truncate">{task.title}</td>
+                <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{task.workstreamId ? (wsName.get(task.workstreamId) ?? '—') : '—'}</td>
+                <td className="px-3 py-2 text-slate-600 max-w-[140px] truncate">{p || '—'}</td>
+                <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{fmtDate(task.startDate)}</td>
+                <td className={`px-3 py-2 whitespace-nowrap ${h === 'OVERDUE' ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>{fmtDate(task.deadline)}</td>
+                <td className="px-3 py-2"><span className={priorityClass(task.priority)}>{task.priority}</span></td>
                 <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                   <select
-                    value={t.status}
+                    value={task.status}
                     disabled={updateProgress.isPending}
-                    onChange={(e) =>
-                      updateProgress.mutate({
-                        taskId: t.id,
-                        payload: { status: e.target.value as TaskStatus },
-                      })
-                    }
-                    className="rounded-md border border-slate-300 px-1 py-0.5 text-xs"
+                    onChange={(e) => updateProgress.mutate({ taskId: task.id, payload: { status: e.target.value as TaskStatus } })}
+                    className="rounded-md border border-slate-300 px-1 py-0.5 text-xs bg-white"
                   >
                     {STATUSES.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
                   </select>
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums">{t.percent}%</td>
-                <td className="px-3 py-2 text-slate-500">{t.deadline ? t.deadline.slice(0, 10) : '—'}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{task.percent}%</td>
+                <td className="px-3 py-2">
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${HEALTH_STYLE[h].chip}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${HEALTH_STYLE[h].dot}`} />
+                    {HEALTH_LABEL[h]}
+                  </span>
+                </td>
               </tr>
             ))}
-            {list.data && list.data.data.length === 0 && (
-              <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-400">No tasks match.</td></tr>
+            {!list.isLoading && pageRows.length === 0 && (
+              <tr><td colSpan={10} className="px-3 py-6 text-center text-slate-400">{t.noTasksMatch}</td></tr>
             )}
           </tbody>
         </table>
@@ -117,29 +185,52 @@ export function TasksTable({ projectId, onOpen }: Props) {
 
       <div className="p-3 flex items-center justify-between text-sm border-t border-slate-200">
         <span className="text-slate-500">
-          {list.data ? `${list.data.total} tasks · page ${list.data.page}/${totalPages}` : ''}
+          {rows.length} {t.tasksCount} · {t.page} {safePage}/{totalPages}
+          {(q || status || priority || dept || health) && (
+            <button type="button" onClick={reset} className="ml-3 text-indigo-600 hover:text-indigo-800">{t.resetFilters}</button>
+          )}
         </span>
         <div className="flex gap-2">
-          <button
-            type="button"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className="rounded border border-slate-300 px-3 py-1 disabled:opacity-50"
-          >
-            Prev
-          </button>
-          <button
-            type="button"
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-            className="rounded border border-slate-300 px-3 py-1 disabled:opacity-50"
-          >
-            Next
-          </button>
+          <button type="button" disabled={safePage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="rounded border border-slate-300 px-3 py-1 disabled:opacity-50">{t.prev}</button>
+          <button type="button" disabled={safePage >= totalPages} onClick={() => setPage((p) => p + 1)}
+            className="rounded border border-slate-300 px-3 py-1 disabled:opacity-50">{t.next}</button>
         </div>
       </div>
     </div>
   );
+}
+
+/** PIC = the IN_CHARGE assignment label, falling back to the task's inChargeLabel. */
+function pic(task: TaskDto): string {
+  return task.assignments?.find((a) => a.role === 'IN_CHARGE')?.label ?? task.inChargeLabel ?? '';
+}
+
+function cmp(
+  a: { task: TaskDto }, b: { task: TaskDto }, field: SortField,
+): number {
+  const ta = a.task, tb = b.task;
+  switch (field) {
+    case 'priority': return PRIO_RANK[ta.priority] - PRIO_RANK[tb.priority];
+    case 'percent': return ta.percent - tb.percent;
+    case 'code': return ta.code.localeCompare(tb.code);
+    case 'startDate': return dateVal(ta.startDate) - dateVal(tb.startDate);
+    case 'deadline': return dateVal(ta.deadline) - dateVal(tb.deadline);
+    case 'updatedAt': return dateVal(ta.updatedAt) - dateVal(tb.updatedAt);
+  }
+}
+
+/** Null dates sort last in ascending order. */
+function dateVal(d: string | null): number {
+  return d ? new Date(d).getTime() : Number.MAX_SAFE_INTEGER;
+}
+
+function fmtDate(d: string | null): string {
+  return d ? d.slice(0, 10) : '—';
+}
+
+function Th({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return <th className={`px-3 py-2 text-left font-medium whitespace-nowrap ${className}`}>{children}</th>;
 }
 
 function priorityClass(p: Priority): string {

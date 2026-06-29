@@ -33,6 +33,14 @@ export const createMilestoneSchema = z
   .strict();
 export type CreateMilestoneDto = z.infer<typeof createMilestoneSchema>;
 
+/** Result of auto-generating milestones from the project's phases. */
+export const generateMilestonesResultSchema = z.object({
+  created: z.number().int().nonnegative(),
+  updated: z.number().int().nonnegative(),
+  total: z.number().int().nonnegative(),
+});
+export type GenerateMilestonesResult = z.infer<typeof generateMilestonesResultSchema>;
+
 export const updateMilestoneSchema = createMilestoneSchema.partial();
 export type UpdateMilestoneDto = z.infer<typeof updateMilestoneSchema>;
 

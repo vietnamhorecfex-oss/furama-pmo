@@ -16,6 +16,7 @@ import {
   setMilestoneStatusSchema,
   updateMilestoneSchema,
   type CreateMilestoneDto,
+  type GenerateMilestonesResult,
   type MilestoneDto,
   type SetMilestoneStatusDto,
   type UpdateMilestoneDto,
@@ -47,6 +48,13 @@ export class ProjectMilestonesController {
   ): Promise<MilestoneDto> {
     const c = ctxFromReq(req);
     return this.milestones.create(c, pid, dto, c.ip);
+  }
+
+  @Post('generate-from-phases')
+  @HttpCode(HttpStatus.OK)
+  generateFromPhases(@Param('projectId') pid: string, @Req() req: AuthedRequest): Promise<GenerateMilestonesResult> {
+    const c = ctxFromReq(req);
+    return this.milestones.generateFromPhases(c, pid, c.ip);
   }
 }
 

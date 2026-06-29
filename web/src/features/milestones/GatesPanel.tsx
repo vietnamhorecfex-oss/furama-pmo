@@ -4,9 +4,11 @@
  * and surfaces the 403 inline if it returns).
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import type { GateStatus, MilestoneDto } from '@furama/shared';
+import type { GateStatus, GenerateMilestonesResult, MilestoneDto } from '@furama/shared';
 import { api } from '../../lib/api-client';
 import { useMilestones } from '../dashboard/useDashboard';
+import { useI18n } from '../../lib/i18n';
+import { usePermissions } from '../../lib/permissions';
 
 const STATUSES: GateStatus[] = ['PENDING', 'PASSED', 'FAILED', 'NA'];
 const COLOR: Record<GateStatus, string> = {
@@ -19,6 +21,8 @@ const COLOR: Record<GateStatus, string> = {
 interface Props { projectId: string }
 
 export function GatesPanel({ projectId }: Props) {
+  const { t } = useI18n();
+  const { can } = usePermissions(projectId);
   const q = useMilestones(projectId);
   const qc = useQueryClient();
   const setStatus = useMutation({
@@ -28,13 +32,42 @@ export function GatesPanel({ projectId }: Props) {
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['milestones', projectId] }),
   });
+  const generate = useMutation({
+    mutationFn: async (): Promise<GenerateMilestonesResult> => {
+      const { data } = await api.post<GenerateMilestonesResult>(`/projects/${projectId}/milestones/generate-from-phases`);
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['milestones', projectId] }),
+  });
 
-  if (q.isLoading) return <p className="text-slate-500">Loading milestones…</p>;
-  if (q.isError || !q.data) return <p className="text-red-600">Failed to load milestones.</p>;
+  if (q.isLoading) return <p className="text-slate-500">{t.loading}</p>;
+  if (q.isError || !q.data) return <p className="text-red-600">{t.error}</p>;
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-4">
-      <h3 className="font-semibold text-slate-800 mb-3">Milestones &amp; Gates</h3>
+      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+        <h3 className="font-semibold text-slate-800">{t.milestonesTitle}</h3>
+        {can('MANAGE_MILESTONE') && (
+          <button
+            type="button"
+            onClick={() => generate.mutate()}
+            disabled={generate.isPending}
+            className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3 py-1.5 disabled:opacity-60"
+          >
+            {generate.isPending ? t.generatingMilestones : `⤓ ${t.autoFromPhases}`}
+          </button>
+        )}
+      </div>
+      {generate.isSuccess && generate.data && (
+        <p className="text-xs text-emerald-700 mb-2">
+          {t.milestonesGenerated.replace('{c}', String(generate.data.created)).replace('{u}', String(generate.data.updated))}
+        </p>
+      )}
+      {generate.isError && (
+        <p className="text-xs text-red-700 mb-2">
+          {(generate.error as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message ?? t.error}
+        </p>
+      )}
       <ul className="divide-y divide-slate-100">
         {q.data.map((m) => (
           <li key={m.id} className="py-3 first:pt-0 last:pb-0">
@@ -63,7 +96,7 @@ export function GatesPanel({ projectId }: Props) {
             {m.readinessPct !== null && (
               <div className="mt-2">
                 <div className="text-xs text-slate-500 mb-1">
-                  Readiness: {m.completedCount}/{m.totalCount} tasks complete
+                  {t.readinessLabel}: {m.completedCount}/{m.totalCount} {t.tasksComplete}
                 </div>
                 <div className="h-1.5 bg-slate-100 rounded">
                   <div
@@ -76,7 +109,7 @@ export function GatesPanel({ projectId }: Props) {
           </li>
         ))}
         {q.data.length === 0 && (
-          <li className="text-sm text-slate-400 py-2">No milestones yet.</li>
+          <li className="text-sm text-slate-400 py-2">{t.noMilestones}</li>
         )}
       </ul>
       {setStatus.isError && (

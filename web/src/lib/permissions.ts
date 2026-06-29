@@ -10,15 +10,17 @@ import { useAuth } from './auth-store';
 export type Role = 'OWNER' | 'PM' | 'LEAD' | 'MEMBER' | 'VIEWER';
 export type Cap =
   | 'VIEW' | 'COMMENT' | 'UPDATE_PROGRESS' | 'EDIT_TASK' | 'DELETE_TASK'
-  | 'MANAGE_MEMBERS' | 'MANAGE_CONFIG' | 'MANAGE_BUDGET' | 'IMPORT_EXPORT';
+  | 'MANAGE_MEMBERS' | 'MANAGE_CONFIG' | 'MANAGE_BUDGET' | 'MANAGE_MILESTONE' | 'IMPORT_EXPORT';
 
 // true = allowed (scope-limited capabilities are `true` here; server enforces the scope).
+// MANAGE_MILESTONE here gates full create/generate (Owner/PM); LEAD's setStatus-only scope
+// is enforced server-side, so the status dropdown stays visible to all and 403s if denied.
 const UI_MATRIX: Record<Role, Record<Cap, boolean>> = {
-  OWNER:  { VIEW: true, COMMENT: true, UPDATE_PROGRESS: true, EDIT_TASK: true, DELETE_TASK: true,  MANAGE_MEMBERS: true,  MANAGE_CONFIG: true,  MANAGE_BUDGET: true,  IMPORT_EXPORT: true },
-  PM:     { VIEW: true, COMMENT: true, UPDATE_PROGRESS: true, EDIT_TASK: true, DELETE_TASK: true,  MANAGE_MEMBERS: true,  MANAGE_CONFIG: true,  MANAGE_BUDGET: true,  IMPORT_EXPORT: true },
-  LEAD:   { VIEW: true, COMMENT: true, UPDATE_PROGRESS: true, EDIT_TASK: true, DELETE_TASK: false, MANAGE_MEMBERS: false, MANAGE_CONFIG: false, MANAGE_BUDGET: false, IMPORT_EXPORT: false },
-  MEMBER: { VIEW: true, COMMENT: true, UPDATE_PROGRESS: true, EDIT_TASK: false, DELETE_TASK: false, MANAGE_MEMBERS: false, MANAGE_CONFIG: false, MANAGE_BUDGET: false, IMPORT_EXPORT: false },
-  VIEWER: { VIEW: true, COMMENT: false, UPDATE_PROGRESS: false, EDIT_TASK: false, DELETE_TASK: false, MANAGE_MEMBERS: false, MANAGE_CONFIG: false, MANAGE_BUDGET: false, IMPORT_EXPORT: false },
+  OWNER:  { VIEW: true, COMMENT: true, UPDATE_PROGRESS: true, EDIT_TASK: true, DELETE_TASK: true,  MANAGE_MEMBERS: true,  MANAGE_CONFIG: true,  MANAGE_BUDGET: true,  MANAGE_MILESTONE: true,  IMPORT_EXPORT: true },
+  PM:     { VIEW: true, COMMENT: true, UPDATE_PROGRESS: true, EDIT_TASK: true, DELETE_TASK: true,  MANAGE_MEMBERS: true,  MANAGE_CONFIG: true,  MANAGE_BUDGET: true,  MANAGE_MILESTONE: true,  IMPORT_EXPORT: true },
+  LEAD:   { VIEW: true, COMMENT: true, UPDATE_PROGRESS: true, EDIT_TASK: true, DELETE_TASK: false, MANAGE_MEMBERS: false, MANAGE_CONFIG: false, MANAGE_BUDGET: false, MANAGE_MILESTONE: false, IMPORT_EXPORT: false },
+  MEMBER: { VIEW: true, COMMENT: true, UPDATE_PROGRESS: true, EDIT_TASK: false, DELETE_TASK: false, MANAGE_MEMBERS: false, MANAGE_CONFIG: false, MANAGE_BUDGET: false, MANAGE_MILESTONE: false, IMPORT_EXPORT: false },
+  VIEWER: { VIEW: true, COMMENT: false, UPDATE_PROGRESS: false, EDIT_TASK: false, DELETE_TASK: false, MANAGE_MEMBERS: false, MANAGE_CONFIG: false, MANAGE_BUDGET: false, MANAGE_MILESTONE: false, IMPORT_EXPORT: false },
 };
 
 export function can(role: Role | null | undefined, cap: Cap): boolean {

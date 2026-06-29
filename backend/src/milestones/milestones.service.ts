@@ -19,6 +19,7 @@ import {
 import { Prisma } from '@prisma/client';
 import type {
   CreateMilestoneDto,
+  GenerateMilestonesResult,
   MilestoneCriteria,
   MilestoneDto,
   SetMilestoneStatusDto,
@@ -87,6 +88,67 @@ export class MilestonesService {
       { action: 'milestone.created', entityType: 'Milestone', entityId: row.id, after: { name: dto.name, type: dto.type } },
     );
     return this.hydrate(row as MilestoneRow);
+  }
+
+  /**
+   * Auto-pickup milestones from the project's phases (the seed/Excel "phase" column).
+   * Each non-empty phase becomes a MILESTONE: date = its latest task deadline, criteria =
+   * the phase's task ids (drives readiness). Idempotent — matches existing milestones by
+   * name, updating their date + criteria instead of duplicating.
+   */
+  async generateFromPhases(
+    ctx: AuthContext,
+    projectId: string,
+    ip: string | null,
+  ): Promise<GenerateMilestonesResult> {
+    await this.rbac.assertCan(ctx, 'MANAGE_MILESTONE', projectId);
+
+    const [phases, tasks, existing] = await Promise.all([
+      this.prisma.phase.findMany({ where: { projectId }, orderBy: { order: 'asc' } }),
+      this.prisma.task.findMany({
+        where: { projectId, phaseId: { not: null } },
+        select: { id: true, phaseId: true, deadline: true },
+      }),
+      this.prisma.milestone.findMany({ where: { projectId }, select: { id: true, name: true } }),
+    ]);
+
+    const byPhase = new Map<string, { ids: string[]; maxDeadline: Date | null }>();
+    for (const t of tasks) {
+      if (!t.phaseId) continue;
+      const g = byPhase.get(t.phaseId) ?? { ids: [], maxDeadline: null };
+      g.ids.push(t.id);
+      if (t.deadline && (!g.maxDeadline || t.deadline > g.maxDeadline)) g.maxDeadline = t.deadline;
+      byPhase.set(t.phaseId, g);
+    }
+    const idByName = new Map(existing.map((m) => [m.name.toLowerCase(), m.id]));
+
+    let created = 0;
+    let updated = 0;
+    for (const ph of phases) {
+      const g = byPhase.get(ph.id);
+      if (!g || g.ids.length === 0) continue; // skip phases with no tasks
+      const criteria = { taskIds: g.ids.slice(0, 200) } as unknown as Prisma.InputJsonValue;
+      const existingId = idByName.get(ph.name.toLowerCase());
+      if (existingId) {
+        await this.prisma.milestone.update({
+          where: { id: existingId },
+          data: { date: g.maxDeadline, criteria },
+        });
+        updated++;
+      } else {
+        await this.prisma.milestone.create({
+          data: { projectId, name: ph.name, date: g.maxDeadline, type: 'MILESTONE', status: 'PENDING', criteria },
+        });
+        created++;
+      }
+    }
+
+    const result: GenerateMilestonesResult = { created, updated, total: created + updated };
+    await this.audit.record(
+      { actorId: ctx.userId, projectId, ip },
+      { action: 'milestone.generatedFromPhases', entityType: 'Project', entityId: projectId, after: { ...result } },
+    );
+    return result;
   }
 
   async update(

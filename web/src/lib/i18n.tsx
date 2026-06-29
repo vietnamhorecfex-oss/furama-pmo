@@ -17,6 +17,11 @@ const vi = {
   inReview: 'Đang xem xét', blocked: 'Bị chặn', completed: 'Hoàn thành',
   dropHere: 'Thả vào đây', boardTruncated: 'Hiển thị 500 task đầu. Dùng tab Công việc để lọc chi tiết.',
   syncing: 'Đang đồng bộ…', synced: 'Đã đồng bộ',
+  // Gates / milestones
+  milestonesTitle: 'Cột mốc & Cổng', autoFromPhases: 'Tự động tạo từ Phase',
+  generatingMilestones: 'Đang tạo…', noMilestones: 'Chưa có cột mốc',
+  readinessLabel: 'Mức sẵn sàng', tasksComplete: 'task hoàn thành',
+  milestonesGenerated: 'Đã tạo {c} mới, cập nhật {u} cột mốc từ phase',
   // Calendar
   calendarTitle: 'Lịch tiến độ', today: 'Hôm nay', noTasks: 'Không có task',
   // AI translate
@@ -86,6 +91,10 @@ const en: typeof vi = {
   inReview: 'In review', blocked: 'Blocked', completed: 'Completed',
   dropHere: 'Drop here', boardTruncated: 'Showing first 500 tasks. Use Tasks tab for full filtering.',
   syncing: 'Syncing…', synced: 'Live',
+  milestonesTitle: 'Milestones & Gates', autoFromPhases: 'Auto-generate from phases',
+  generatingMilestones: 'Generating…', noMilestones: 'No milestones yet',
+  readinessLabel: 'Readiness', tasksComplete: 'tasks complete',
+  milestonesGenerated: 'Created {c}, updated {u} milestones from phases',
   calendarTitle: 'Project Calendar', today: 'Today', noTasks: 'No tasks',
   translateContent: 'Translate (AI)', translating: 'Translating…',
   translatePlaceholder: 'Enter text to translate or select target language…',

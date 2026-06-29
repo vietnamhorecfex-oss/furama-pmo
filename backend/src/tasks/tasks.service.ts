@@ -304,7 +304,11 @@ export class TasksService {
         entityType: 'Task',
         entityId: taskId,
         before: { status: before.status, percent: before.percent },
-        after: { status: after.status, percent: after.percent },
+        after: {
+          status: after.status,
+          percent: after.percent,
+          ...(dto.notes !== undefined ? { note: dto.notes } : {}),
+        },
       },
     );
     this.realtime.emit(before.projectId, 'task.progress', {

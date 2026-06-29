@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  AuditLogDto,
   ListTasksQuery,
   Paginated,
   ProgressUpdateDto,
@@ -40,7 +41,22 @@ export function useUpdateProgress(projectId: string | undefined) {
     },
     onSuccess: (task) => {
       qc.invalidateQueries({ queryKey: ['tasks', projectId] });
+      qc.invalidateQueries({ queryKey: ['task-history', task.id] });
       qc.setQueryData(['task', task.id], task);
+    },
+  });
+}
+
+/** Full audit trail for one task (status/percent/note changes), newest first. */
+export function useTaskHistory(projectId: string | undefined, taskId: string | undefined) {
+  return useQuery({
+    enabled: !!projectId && !!taskId,
+    queryKey: ['task-history', taskId],
+    queryFn: async (): Promise<AuditLogDto[]> => {
+      const { data } = await api.get<AuditLogDto[]>(
+        `/projects/${projectId}/activity/history/Task/${taskId}`,
+      );
+      return data;
     },
   });
 }

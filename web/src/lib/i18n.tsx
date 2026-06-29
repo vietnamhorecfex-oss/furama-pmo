@@ -22,6 +22,14 @@ const vi = {
   // AI translate
   translateContent: 'Dịch nội dung (AI)', translating: 'Đang dịch…',
   translatePlaceholder: 'Nhập nội dung cần dịch hoặc chọn ngôn ngữ đích…',
+  // Task drawer — progress + history
+  updateProgress: 'Cập nhật tiến độ', statusLabel: 'Trạng thái', percentLabel: 'Tiến độ (%)',
+  progressNote: 'Ghi chú cập nhật', progressNotePlaceholder: 'Mô tả thay đổi (tùy chọn)…',
+  saveProgress: 'Lưu cập nhật', savingProgress: 'Đang lưu…',
+  history: 'Lịch sử cập nhật', noHistory: 'Chưa có lịch sử', note: 'Ghi chú',
+  inCharge: 'Phụ trách', support: 'Hỗ trợ', description: 'Mô tả', comments: 'Bình luận',
+  addComment: 'Thêm bình luận…', postComment: 'Gửi bình luận', posting: 'Đang gửi…',
+  noComments: 'Chưa có bình luận', created: 'Tạo mới', updated: 'Cập nhật',
   // Common
   loading: 'Đang tải…', error: 'Lỗi', save: 'Lưu', cancel: 'Hủy', confirm: 'Xác nhận',
   noneYet: 'Chưa có dữ liệu',
@@ -42,6 +50,13 @@ const en: typeof vi = {
   calendarTitle: 'Project Calendar', today: 'Today', noTasks: 'No tasks',
   translateContent: 'Translate (AI)', translating: 'Translating…',
   translatePlaceholder: 'Enter text to translate or select target language…',
+  updateProgress: 'Update progress', statusLabel: 'Status', percentLabel: 'Progress (%)',
+  progressNote: 'Update note', progressNotePlaceholder: 'Describe the change (optional)…',
+  saveProgress: 'Save update', savingProgress: 'Saving…',
+  history: 'Update history', noHistory: 'No history yet', note: 'Note',
+  inCharge: 'In charge', support: 'Support', description: 'Description', comments: 'Comments',
+  addComment: 'Add a comment…', postComment: 'Post comment', posting: 'Posting…',
+  noComments: 'No comments yet', created: 'Created', updated: 'Updated',
   loading: 'Loading…', error: 'Error', save: 'Save', cancel: 'Cancel', confirm: 'Confirm',
   noneYet: 'Nothing here yet',
 };

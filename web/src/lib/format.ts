@@ -7,3 +7,8 @@ export function formatVnd(n: number): string {
   if (abs >= 1_000) return `₫${(n / 1_000).toFixed(0)}k`;
   return `₫${n}`;
 }
+
+/** Exact VND with thousands separators, e.g. "2,241,700,000 ₫". For tooltips/totals. */
+export function formatVndFull(n: number): string {
+  return `${n.toLocaleString('vi-VN')} ₫`;
+}

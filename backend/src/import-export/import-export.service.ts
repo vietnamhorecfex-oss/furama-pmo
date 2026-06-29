@@ -39,6 +39,8 @@ export interface ImportResult {
   total: number;
   workstreamsCreated: number;
   phasesCreated: number;
+  budgetCategoriesCreated: number;
+  budgetCapVnd: number;
   unknownStatuses: string[];
   unknownPriorities: string[];
 }
@@ -120,11 +122,47 @@ export class ImportExportService {
       total: 0,
       workstreamsCreated: 0,
       phasesCreated: 0,
+      budgetCategoriesCreated: 0,
+      budgetCapVnd: 0,
       unknownStatuses: [],
       unknownPriorities: [],
     };
     const unknownStatusSet = new Set<string>();
     const unknownPrioSet = new Set<string>();
+
+    // ── Pre-pass: derive budget categories + project cap from the seed ──────────
+    // Each distinct non-empty `category` that carries a positive budget becomes a
+    // BudgetCategory whose plannedVnd is the sum of its rows' budgets (planned = the
+    // approved baseline). Tasks then link to it via budgetCategoryId so the budget
+    // summary groups by real category instead of one "Uncategorized" bucket. The
+    // project cap is set to the line-item total — the seed defines the envelope.
+    const categoryBudget = new Map<string, bigint>();
+    let totalBudgetVnd = 0n;
+    for (const row of seed.rows) {
+      const cat = stringOf(row[idx('category')]);
+      const b = parseMoney(row[idx('budget')]);
+      totalBudgetVnd += b;
+      if (cat && b > 0n) categoryBudget.set(cat, (categoryBudget.get(cat) ?? 0n) + b);
+    }
+    const rankedCats = [...categoryBudget.entries()].sort((a, b) =>
+      b[1] > a[1] ? 1 : b[1] < a[1] ? -1 : 0,
+    );
+    const categoryIdByName = new Map<string, string>();
+    for (let i = 0; i < rankedCats.length; i++) {
+      const [name, planned] = rankedCats[i];
+      const cat = await this.prisma.budgetCategory.upsert({
+        where: { projectId_name: { projectId, name } },
+        update: { plannedVnd: planned, order: i },
+        create: { projectId, name, plannedVnd: planned, order: i },
+      });
+      categoryIdByName.set(name, cat.id);
+    }
+    result.budgetCategoriesCreated = rankedCats.length;
+    await this.prisma.project.update({
+      where: { id: projectId },
+      data: { budgetCapVnd: totalBudgetVnd },
+    });
+    result.budgetCapVnd = Number(totalBudgetVnd);
 
     for (const row of seed.rows) {
       const code = stringOf(row[idx('id')]);
@@ -191,6 +229,7 @@ export class ImportExportService {
         phaseId,
         workstreamId: wsId,
         category: category ?? null,
+        budgetCategoryId: category ? (categoryIdByName.get(category) ?? null) : null,
         startDate: start,
         deadline,
         durationDays: duration ?? null,

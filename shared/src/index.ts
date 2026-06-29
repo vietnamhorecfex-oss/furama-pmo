@@ -7,3 +7,6 @@ export * from './schemas/config-dim';
 export * from './schemas/task';
 export * from './schemas/ws-events';
 export * from './schemas/comment';
+export * from './schemas/budget';
+export * from './schemas/milestone';
+export * from './schemas/dashboard';

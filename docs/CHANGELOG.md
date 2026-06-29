@@ -70,6 +70,25 @@ First implementation had `0<percent<100 + NOT_STARTED → IN_PROGRESS` fire befo
 ### Comment sanitisation
 HTML tags and `javascript:` / `data:` / `vbscript:` URLs are stripped from comment bodies server-side. Live test: `<script>alert(1)</script>` → `alert(1)`.
 
+## 2026-06-29 — M5 budget + gates + dashboard
+
+### Aggregations live in the DB
+Every rollup (`groupBy` + `_sum` / `_count`, `aggregate _avg`) runs inside Prisma so the app process never pulls all 628 tasks to count them. The single `summary()` call issues one `$transaction([...])` of indexed queries; the dashboard composes the same `BudgetService.summary()` so /budget and /dashboard never drift.
+
+### Gate readiness from criteria.taskIds
+Milestone `criteria` is JSONB; the system reads `criteria.taskIds: string[]`. A gate's `readinessPct` is the percent of those tasks in COMPLETED. The shape is intentionally a Json field rather than a join table so non-task criteria (external sign-offs, document approvals) can be added later without a migration.
+
+### LEAD gate scope
+LEAD can `setStatus` only when every task in `criteria.taskIds` belongs to a workstream the LEAD owns (`leadOwnsWorkstream`). Spans outside the scope → 403. Integration test covers both paths.
+
+### Prisma quirks dealt with
+- `groupBy` on this Prisma version requires `orderBy` when `_count`/`_sum` is used; added it on every groupBy call.
+- `_sum` and `_count` on groupBy rows are typed as possibly-undefined; helpers `countAll()` and `r._sum?.x ?? 0n` keep TS happy without runtime cost.
+- Nullable JSON field updates need `Prisma.JsonNull` (not literal `null`).
+
+## Gate M5 — verified DONE
+`pnpm typecheck` clean · `pnpm test` **116 passed** (added 2 budget + 2 milestone + 1 dashboard integration). Live on the seed project: `/budget/summary` returns `{capVnd:0, plannedVnd:0, committedVnd:2_241_700_000, actual:0, overCap:false, byCategory:1, byWorkstream:3, overruns:0}`; `/dashboard` returns full 628-task health (`COMPLETED:3, IN_PROGRESS:1, NOT_STARTED:624, byPriority CRITICAL:397/HIGH:212/MEDIUM:19`), 3 workstreams breakdown, 12 upcoming-deadline rows; created a gate with 3 task criteria → readiness `67%` (2/3 done from prior runs).
+
 ## Gate M4 — verified DONE
 `pnpm typecheck` clean · `pnpm test` **111 passed** (added 5 realtime unit). Live WS E2E: spectator socket joins `project:<pid>` and receives both `task.progress` (status=COMPLETED, percent=100 — invariant applied) and `comment.created` events fired by a separate HTTP request. Comment sanitisation verified. Web `pnpm build` produces a 293 KB JS bundle (gzip 94 KB).
 

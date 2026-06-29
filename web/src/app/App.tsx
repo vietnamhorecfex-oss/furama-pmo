@@ -12,8 +12,11 @@ import { useProjects } from '../features/projects/useProjects';
 import { TasksTable } from '../features/tasks/TasksTable';
 import { KanbanBoard } from '../features/tasks/KanbanBoard';
 import { TaskDrawer } from '../features/tasks/TaskDrawer';
+import { DashboardPage } from '../features/dashboard/DashboardPage';
+import { BudgetPanel } from '../features/budget/BudgetPanel';
+import { GatesPanel } from '../features/milestones/GatesPanel';
 
-type View = 'table' | 'board';
+type View = 'dashboard' | 'table' | 'board' | 'budget' | 'gates';
 
 export function App() {
   const token = useAuth((s) => s.accessToken);
@@ -32,7 +35,7 @@ export function App() {
 function Workspace({ userEmail }: { userEmail: string }) {
   const projects = useProjects();
   const [projectId, setProjectId] = useState<string | undefined>(undefined);
-  const [view, setView] = useState<View>('table');
+  const [view, setView] = useState<View>('dashboard');
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const logout = useLogout();
 
@@ -71,16 +74,16 @@ function Workspace({ userEmail }: { userEmail: string }) {
           </div>
         </div>
         <div className="max-w-7xl mx-auto px-4 pb-2 flex gap-2">
-          {(['table', 'board'] as View[]).map((v) => (
+          {(['dashboard', 'table', 'board', 'budget', 'gates'] as View[]).map((v) => (
             <button
               key={v}
               type="button"
               onClick={() => setView(v)}
-              className={`px-3 py-1.5 text-sm rounded ${
+              className={`px-3 py-1.5 text-sm rounded capitalize ${
                 view === v ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              {v === 'table' ? 'Table' : 'Board'}
+              {v}
             </button>
           ))}
         </div>
@@ -88,10 +91,16 @@ function Workspace({ userEmail }: { userEmail: string }) {
 
       <main className="max-w-7xl mx-auto px-4 py-4">
         {projectId ? (
-          view === 'table' ? (
+          view === 'dashboard' ? (
+            <DashboardPage projectId={projectId} />
+          ) : view === 'table' ? (
             <TasksTable projectId={projectId} onOpen={(id) => setOpenTaskId(id)} />
-          ) : (
+          ) : view === 'board' ? (
             <KanbanBoard projectId={projectId} onOpen={(id) => setOpenTaskId(id)} />
+          ) : view === 'budget' ? (
+            <BudgetPanel projectId={projectId} />
+          ) : (
+            <GatesPanel projectId={projectId} />
           )
         ) : (
           <p className="text-slate-500">Select a project to begin.</p>

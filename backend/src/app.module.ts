@@ -20,6 +20,9 @@ import { TasksModule } from './tasks/tasks.module';
 import { ImportExportModule } from './import-export/import-export.module';
 import { CommentsModule } from './comments/comments.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { BudgetModule } from './budget/budget.module';
+import { MilestonesModule } from './milestones/milestones.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -54,6 +57,9 @@ import { RealtimeModule } from './realtime/realtime.module';
     ImportExportModule,
     CommentsModule,
     RealtimeModule,
+    BudgetModule,
+    MilestonesModule,
+    DashboardModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

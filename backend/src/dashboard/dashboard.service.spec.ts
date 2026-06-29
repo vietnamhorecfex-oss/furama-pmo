@@ -26,7 +26,7 @@ describe('DashboardService.overview (M5 integration)', () => {
   beforeAll(async () => {
     if (SKIP_DB) return;
     deps = await bootIntegrationDeps();
-    const budget = new BudgetService(deps.prisma, deps.rbac);
+    const budget = new BudgetService(deps.prisma, deps.rbac, deps.audit);
     svc = new DashboardService(deps.prisma, deps.rbac, budget);
     projects = new ProjectsService(deps.prisma, deps.audit, deps.rbac);
   });

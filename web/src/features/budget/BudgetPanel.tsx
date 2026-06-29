@@ -4,10 +4,13 @@
  * per-workstream breakdown, searchable per-category table (planned vs committed vs actual)
  * with overrun flags, and an overrun-alerts panel. All amounts from /budget/summary.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useBudgetSummary } from '../dashboard/useDashboard';
+import { useSetBudgetCap, useSetCategoryPlanned, useImportBudget } from './useBudget';
+import { downloadBudgetCsv, parseBudgetCsv } from './budgetCsv';
 import { formatVnd, formatVndFull } from '../../lib/format';
 import { useI18n } from '../../lib/i18n';
+import { usePermissions } from '../../lib/permissions';
 
 interface Props { projectId: string }
 
@@ -16,8 +19,22 @@ const TOP_N = 12;
 export function BudgetPanel({ projectId }: Props) {
   const { t } = useI18n();
   const q = useBudgetSummary(projectId);
+  const { can } = usePermissions(projectId);
+  const canEdit = can('MANAGE_BUDGET');
+  const setCap = useSetBudgetCap(projectId);
+  const setPlanned = useSetCategoryPlanned(projectId);
+  const importBudget = useImportBudget(projectId);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState('');
   const [showAll, setShowAll] = useState(false);
+
+  async function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const text = await file.text();
+    importBudget.mutate(parseBudgetCsv(text));
+  }
 
   const b = q.data;
   const overrunIds = useMemo(
@@ -46,9 +63,48 @@ export function BudgetPanel({ projectId }: Props) {
     <div className="space-y-4">
       {/* KPI strip */}
       <div className="bg-white rounded-xl border border-slate-200 p-4">
-        <h3 className="font-semibold text-slate-800 mb-3">{t.projectTotals}</h3>
+        <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+          <h3 className="font-semibold text-slate-800">{t.projectTotals}</h3>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => downloadBudgetCsv(b, `budget-${projectId}.csv`)}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
+            >
+              ↓ {t.exportExcel}
+            </button>
+            {canEdit && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={importBudget.isPending}
+                  className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-60"
+                  title={t.importHint}
+                >
+                  ↑ {importBudget.isPending ? t.importingBudget : t.importExcel}
+                </button>
+                <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onImportFile} />
+              </>
+            )}
+          </div>
+        </div>
+        {importBudget.isSuccess && importBudget.data && (
+          <p className="text-xs text-emerald-700 mb-2">
+            {t.budgetImportedMsg.replace('{u}', String(importBudget.data.updated)).replace('{c}', String(importBudget.data.created))}
+          </p>
+        )}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
-          <Cell label={t.cap} value={formatVnd(b.capVnd)} title={formatVndFull(b.capVnd)} />
+          <div>
+            <p className="text-xs uppercase text-slate-500 tracking-wide">{t.cap}</p>
+            <EditableAmount
+              value={b.capVnd}
+              canEdit={canEdit}
+              pending={setCap.isPending}
+              onSave={(v) => setCap.mutate(v)}
+              className="text-lg font-semibold text-slate-900"
+            />
+          </div>
           <Cell label={t.planned} value={formatVnd(b.plannedVnd)} title={formatVndFull(b.plannedVnd)} />
           <Cell label={t.committed} value={formatVnd(b.committedVnd)} title={formatVndFull(b.committedVnd)} accent={b.overCap ? 'text-red-700' : 'text-slate-900'} />
           <Cell label={t.actual} value={formatVnd(b.actualVnd)} title={formatVndFull(b.actualVnd)} />
@@ -184,8 +240,16 @@ export function BudgetPanel({ projectId }: Props) {
                       </span>
                     )}
                   </span>
-                  <span className="text-slate-500 tabular-nums" title={`${formatVndFull(c.committedVnd)} / ${formatVndFull(c.plannedVnd)}`}>
-                    {formatVnd(c.committedVnd)} / {formatVnd(c.plannedVnd)}
+                  <span className="text-slate-500 tabular-nums flex items-center gap-1">
+                    <span title={formatVndFull(c.committedVnd)}>{formatVnd(c.committedVnd)}</span>
+                    <span className="text-slate-400">/</span>
+                    <EditableAmount
+                      value={c.plannedVnd}
+                      canEdit={canEdit}
+                      pending={setPlanned.isPending}
+                      onSave={(v) => setPlanned.mutate({ categoryId: c.categoryId, plannedVnd: v })}
+                      className="text-slate-500"
+                    />
                   </span>
                 </div>
                 <div className="mt-1 grid grid-cols-1 gap-1">
@@ -214,6 +278,54 @@ export function BudgetPanel({ projectId }: Props) {
         )}
       </div>
     </div>
+  );
+}
+
+/** Shows a formatted VND amount; click (when editable) to edit it inline. */
+function EditableAmount({
+  value, canEdit, pending, onSave, className = '',
+}: {
+  value: number;
+  canEdit: boolean;
+  pending: boolean;
+  onSave: (v: number) => void;
+  className?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  useEffect(() => { setDraft(value); }, [value]);
+
+  if (!canEdit) {
+    return <span className={`tabular-nums ${className}`} title={formatVndFull(value)}>{formatVnd(value)}</span>;
+  }
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => { setDraft(value); setEditing(true); }}
+        className={`tabular-nums border-b border-dashed border-slate-300 hover:border-indigo-400 ${className}`}
+        title={`${formatVndFull(value)} — ${'click to edit'}`}
+      >
+        {formatVnd(value)}
+      </button>
+    );
+  }
+  const commit = () => { setEditing(false); if (draft !== value) onSave(Math.max(0, Math.trunc(draft))); };
+  return (
+    <span className="inline-flex items-center gap-1">
+      <input
+        type="number"
+        min={0}
+        step={1_000_000}
+        autoFocus
+        value={draft}
+        disabled={pending}
+        onChange={(e) => setDraft(Number(e.target.value))}
+        onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
+        onBlur={commit}
+        className="w-36 rounded border border-indigo-300 px-1.5 py-0.5 text-sm tabular-nums"
+      />
+    </span>
   );
 }
 

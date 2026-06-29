@@ -24,7 +24,7 @@ describe('BudgetService.summary (M5 integration)', () => {
   beforeAll(async () => {
     if (SKIP_DB) return;
     deps = await bootIntegrationDeps();
-    budget = new BudgetService(deps.prisma, deps.rbac);
+    budget = new BudgetService(deps.prisma, deps.rbac, deps.audit);
     projects = new ProjectsService(deps.prisma, deps.audit, deps.rbac);
   });
   afterEach(async () => { await cleanupOrg(deps?.prisma, orgId); orgId = undefined; });

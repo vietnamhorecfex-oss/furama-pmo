@@ -13,8 +13,9 @@
  * A category with planned=0 is overrun the moment anyone commits against it.
  */
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type { BudgetSummary } from '@furama/shared';
+import type { BudgetImportDto, BudgetImportResult, BudgetSummary } from '@furama/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { RbacService, type AuthContext } from '../rbac/rbac.service';
 
 @Injectable()
@@ -22,7 +23,72 @@ export class BudgetService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rbac: RbacService,
+    private readonly audit: AuditService,
   ) {}
+
+  // ====================================================================== EDIT
+  /** Set the project budget cap (envelope). Requires MANAGE_BUDGET. */
+  async setCap(ctx: AuthContext, projectId: string, capVnd: number, ip: string | null): Promise<BudgetSummary> {
+    await this.rbac.assertCan(ctx, 'MANAGE_BUDGET', projectId);
+    const before = await this.prisma.project.findUnique({ where: { id: projectId }, select: { budgetCapVnd: true } });
+    if (!before) throw new NotFoundException('Project not found');
+    await this.prisma.project.update({ where: { id: projectId }, data: { budgetCapVnd: BigInt(capVnd) } });
+    await this.audit.record(
+      { actorId: ctx.userId, projectId, ip },
+      { action: 'budget.capSet', entityType: 'Project', entityId: projectId, before: { capVnd: Number(before.budgetCapVnd) }, after: { capVnd } },
+    );
+    return this.summary(ctx, projectId);
+  }
+
+  /** Update a single category's planned amount. Requires MANAGE_BUDGET. */
+  async setCategoryPlanned(ctx: AuthContext, projectId: string, categoryId: string, plannedVnd: number, ip: string | null): Promise<BudgetSummary> {
+    await this.rbac.assertCan(ctx, 'MANAGE_BUDGET', projectId);
+    const cat = await this.prisma.budgetCategory.findFirst({ where: { id: categoryId, projectId }, select: { id: true, plannedVnd: true, name: true } });
+    if (!cat) throw new NotFoundException('Budget category not found');
+    await this.prisma.budgetCategory.update({ where: { id: categoryId }, data: { plannedVnd: BigInt(plannedVnd) } });
+    await this.audit.record(
+      { actorId: ctx.userId, projectId, ip },
+      { action: 'budget.plannedSet', entityType: 'BudgetCategory', entityId: categoryId, before: { plannedVnd: Number(cat.plannedVnd) }, after: { name: cat.name, plannedVnd } },
+    );
+    return this.summary(ctx, projectId);
+  }
+
+  /** Bulk import: set cap and/or update planned by category name (creates missing). Requires MANAGE_BUDGET. */
+  async importBudget(ctx: AuthContext, projectId: string, dto: BudgetImportDto, ip: string | null): Promise<BudgetImportResult> {
+    await this.rbac.assertCan(ctx, 'MANAGE_BUDGET', projectId);
+    const project = await this.prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
+    if (!project) throw new NotFoundException('Project not found');
+
+    const existing = await this.prisma.budgetCategory.findMany({ where: { projectId }, select: { id: true, name: true } });
+    const idByName = new Map(existing.map((c) => [c.name.toLowerCase(), c.id]));
+    let order = existing.length;
+    const result: BudgetImportResult = { updated: 0, created: 0, capUpdated: false };
+
+    for (const row of dto.rows) {
+      const id = idByName.get(row.name.toLowerCase());
+      if (id) {
+        await this.prisma.budgetCategory.update({ where: { id }, data: { plannedVnd: BigInt(row.plannedVnd) } });
+        result.updated++;
+      } else {
+        const created = await this.prisma.budgetCategory.create({
+          data: { projectId, name: row.name, plannedVnd: BigInt(row.plannedVnd), order: order++ },
+        });
+        idByName.set(row.name.toLowerCase(), created.id);
+        result.created++;
+      }
+    }
+
+    if (dto.capVnd !== undefined) {
+      await this.prisma.project.update({ where: { id: projectId }, data: { budgetCapVnd: BigInt(dto.capVnd) } });
+      result.capUpdated = true;
+    }
+
+    await this.audit.record(
+      { actorId: ctx.userId, projectId, ip },
+      { action: 'budget.imported', entityType: 'Project', entityId: projectId, after: { ...result } },
+    );
+    return result;
+  }
 
   async summary(ctx: AuthContext, projectId: string): Promise<BudgetSummary> {
     await this.rbac.assertCan(ctx, 'VIEW_PROJECT', projectId);

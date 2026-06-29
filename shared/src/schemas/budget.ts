@@ -10,6 +10,33 @@
  *  - overruns[]= categories where Σ tasks' budget exceeds the category's planned by >10%
  */
 import { z } from 'zod';
+import { moneyVndSchema } from './common';
+
+/** Set the project budget cap (envelope). */
+export const setBudgetCapSchema = z.object({ capVnd: moneyVndSchema }).strict();
+export type SetBudgetCapDto = z.infer<typeof setBudgetCapSchema>;
+
+/** Update a single category's planned amount. */
+export const updateCategoryPlannedSchema = z.object({ plannedVnd: moneyVndSchema }).strict();
+export type UpdateCategoryPlannedDto = z.infer<typeof updateCategoryPlannedSchema>;
+
+/** Bulk budget import: set the cap and/or update planned amounts per category by name. */
+export const budgetImportSchema = z
+  .object({
+    capVnd: moneyVndSchema.optional(),
+    rows: z
+      .array(z.object({ name: z.string().trim().min(1).max(120), plannedVnd: moneyVndSchema }).strict())
+      .max(2000),
+  })
+  .strict();
+export type BudgetImportDto = z.infer<typeof budgetImportSchema>;
+
+export const budgetImportResultSchema = z.object({
+  updated: z.number().int().nonnegative(),
+  created: z.number().int().nonnegative(),
+  capUpdated: z.boolean(),
+});
+export type BudgetImportResult = z.infer<typeof budgetImportResultSchema>;
 
 export const budgetCategorySummarySchema = z.object({
   categoryId: z.string(),

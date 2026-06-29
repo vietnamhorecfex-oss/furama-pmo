@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth-store';
 import { connectWs, disconnectWs, joinProjectRoom } from '../lib/ws';
 import { useI18n, type Lang } from '../lib/i18n';
+import { usePermissions } from '../lib/permissions';
 import { LoginPage } from '../features/auth/LoginPage';
 import { useLogout } from '../features/auth/useLogin';
 import { useProjects } from '../features/projects/useProjects';
@@ -93,10 +94,20 @@ function Workspace({ userEmail }: { userEmail: string }) {
     calendar: t.calendar,
   };
 
+  // Hide config-only tabs from roles without those capabilities (matches the role matrix).
+  const { can } = usePermissions(projectId);
   const ALL_VIEWS: View[] = [
     'dashboard', 'table', 'board', 'calendar',
-    'budget', 'gates', 'activity', 'team', 'settings', 'io', 'ai',
+    'budget', 'gates', 'activity', 'team',
+    ...(can('MANAGE_CONFIG') ? (['settings'] as View[]) : []),
+    ...(can('IMPORT_EXPORT') ? (['io'] as View[]) : []),
+    'ai',
   ];
+
+  // If the active tab is no longer permitted, fall back to the dashboard.
+  useEffect(() => {
+    if (!ALL_VIEWS.includes(view)) setView('dashboard');
+  }, [ALL_VIEWS, view]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">

@@ -11,6 +11,7 @@ import { useAllTasks } from '../tasks/useTasks';
 import { useDashboard } from '../dashboard/useDashboard';
 import { useAuth } from '../../lib/auth-store';
 import { useI18n } from '../../lib/i18n';
+import { usePermissions } from '../../lib/permissions';
 import { MemberFormModal, ROLE_DISPLAY, type MemberFormValue } from './MemberFormModal';
 
 interface Props { projectId: string }
@@ -27,6 +28,8 @@ export function TeamPage({ projectId }: Props) {
   const tasks = useAllTasks(projectId, { sort: 'code', order: 'asc' });
   const dashboard = useDashboard(projectId);
   const meId = useAuth((s) => s.user?.id);
+  const { can } = usePermissions(projectId);
+  const canManage = can('MANAGE_MEMBERS');
 
   const add = useAddMember(projectId);
   const update = useUpdateMember(projectId);
@@ -67,16 +70,18 @@ export function TeamPage({ projectId }: Props) {
         )}
       </div>
 
-      {/* Add button */}
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => setModal({ mode: 'add' })}
-          className="rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium px-4 py-2"
-        >
-          + {t.addUser}
-        </button>
-      </div>
+      {/* Add button — only roles that can manage members */}
+      {canManage && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setModal({ mode: 'add' })}
+            className="rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium px-4 py-2"
+          >
+            + {t.addUser}
+          </button>
+        </div>
+      )}
 
       {/* Member cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -85,6 +90,7 @@ export function TeamPage({ projectId }: Props) {
             key={m.id}
             m={m}
             isSelf={m.userId === meId}
+            canManage={canManage}
             wsName={wsName}
             taskCount={m.memberLabel ? (taskCountByLabel.get(m.memberLabel) ?? 0) : 0}
             onEdit={() => setModal({ mode: 'edit', member: m })}
@@ -143,10 +149,11 @@ export function TeamPage({ projectId }: Props) {
 }
 
 function MemberCard({
-  m, isSelf, wsName, taskCount, onEdit, onRemove, t,
+  m, isSelf, canManage, wsName, taskCount, onEdit, onRemove, t,
 }: {
   m: MemberDto;
   isSelf: boolean;
+  canManage: boolean;
   wsName: Map<string, string>;
   taskCount: number;
   onEdit: () => void;
@@ -185,14 +192,16 @@ function MemberCard({
         </div>
       )}
 
-      <div className="mt-3 flex gap-2">
-        <button type="button" onClick={onEdit}
-          className="rounded-md border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50">{t.edit}</button>
-        {!isSelf && (
-          <button type="button" onClick={onRemove}
-            className="rounded-md border border-red-200 text-red-600 px-3 py-1 text-sm hover:bg-red-50">{t.remove}</button>
-        )}
-      </div>
+      {canManage && (
+        <div className="mt-3 flex gap-2">
+          <button type="button" onClick={onEdit}
+            className="rounded-md border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50">{t.edit}</button>
+          {!isSelf && (
+            <button type="button" onClick={onRemove}
+              className="rounded-md border border-red-200 text-red-600 px-3 py-1 text-sm hover:bg-red-50">{t.remove}</button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

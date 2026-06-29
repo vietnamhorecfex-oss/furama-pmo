@@ -9,6 +9,7 @@ import type { Priority, TaskDto, TaskStatus } from '@furama/shared';
 import { useAllTasks, useUpdateProgress } from './useTasks';
 import { useWorkstreams } from '../team/useWorkstreams';
 import { useI18n } from '../../lib/i18n';
+import { usePermissions } from '../../lib/permissions';
 import { scheduleHealth, HEALTH_STYLE, type Health } from '../../lib/schedule';
 
 const STATUSES: TaskStatus[] = ['NOT_STARTED', 'IN_PROGRESS', 'IN_REVIEW', 'BLOCKED', 'COMPLETED'];
@@ -28,6 +29,8 @@ export function TasksTable({ projectId, onOpen }: Props) {
   const list = useAllTasks(projectId, { sort: 'code', order: 'asc' });
   const workstreams = useWorkstreams(projectId);
   const updateProgress = useUpdateProgress(projectId);
+  const { can } = usePermissions(projectId);
+  const canEditProgress = can('UPDATE_PROGRESS');
 
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<TaskStatus | ''>('');
@@ -158,14 +161,18 @@ export function TasksTable({ projectId, onOpen }: Props) {
                 <td className={`px-3 py-2 whitespace-nowrap ${h === 'OVERDUE' ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>{fmtDate(task.deadline)}</td>
                 <td className="px-3 py-2"><span className={priorityClass(task.priority)}>{task.priority}</span></td>
                 <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                  <select
-                    value={task.status}
-                    disabled={updateProgress.isPending}
-                    onChange={(e) => updateProgress.mutate({ taskId: task.id, payload: { status: e.target.value as TaskStatus } })}
-                    className="rounded-md border border-slate-300 px-1 py-0.5 text-xs bg-white"
-                  >
-                    {STATUSES.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
-                  </select>
+                  {canEditProgress ? (
+                    <select
+                      value={task.status}
+                      disabled={updateProgress.isPending}
+                      onChange={(e) => updateProgress.mutate({ taskId: task.id, payload: { status: e.target.value as TaskStatus } })}
+                      className="rounded-md border border-slate-300 px-1 py-0.5 text-xs bg-white"
+                    >
+                      {STATUSES.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+                    </select>
+                  ) : (
+                    <span className="text-xs text-slate-600">{task.status.replace('_', ' ')}</span>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums">{task.percent}%</td>
                 <td className="px-3 py-2">

@@ -8,6 +8,7 @@ import type { AuditLogDto, TaskDto, TaskStatus } from '@furama/shared';
 import { useTask, useTaskHistory, useUpdateProgress } from './useTasks';
 import { useAddComment, useComments } from '../comments/useComments';
 import { useI18n } from '../../lib/i18n';
+import { usePermissions } from '../../lib/permissions';
 
 interface Props {
   taskId: string;
@@ -47,6 +48,7 @@ export function TaskDrawer({ taskId, onClose }: Props) {
   }, [onClose]);
 
   const data = task.data;
+  const { can } = usePermissions(data?.projectId);
 
   return (
     <div className="fixed inset-0 z-40">
@@ -67,7 +69,7 @@ export function TaskDrawer({ taskId, onClose }: Props) {
 
         <div className="flex-1 overflow-auto p-4 space-y-5">
           {data && <TaskFacts t={data} i18n={t} />}
-          {data && <ProgressEditor task={data} i18n={t} />}
+          {data && can('UPDATE_PROGRESS') && <ProgressEditor task={data} i18n={t} />}
           {data && <HistoryTimeline projectId={data.projectId} taskId={taskId} i18n={t} />}
 
           <section>
@@ -83,6 +85,7 @@ export function TaskDrawer({ taskId, onClose }: Props) {
                 <li className="text-xs text-slate-400">{t.noComments}</li>
               )}
             </ol>
+            {can('COMMENT') && (
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -107,6 +110,7 @@ export function TaskDrawer({ taskId, onClose }: Props) {
                 {add.isPending ? t.posting : t.postComment}
               </button>
             </form>
+            )}
           </section>
         </div>
       </aside>

@@ -7,6 +7,7 @@ import { useState } from 'react';
 import type { TaskDto, TaskStatus } from '@furama/shared';
 import { useAllTasks, useUpdateProgress } from './useTasks';
 import { useI18n } from '../../lib/i18n';
+import { usePermissions } from '../../lib/permissions';
 
 interface Props {
   projectId: string;
@@ -24,6 +25,8 @@ export function KanbanBoard({ projectId, onOpen }: Props) {
   const { t } = useI18n();
   const list = useAllTasks(projectId, { sort: 'code', order: 'asc' });
   const update = useUpdateProgress(projectId);
+  const { can } = usePermissions(projectId);
+  const canDrag = can('UPDATE_PROGRESS');
   const [dragId, setDragId] = useState<string | null>(null);
   const [draggingOver, setDraggingOver] = useState<TaskStatus | null>(null);
 
@@ -91,8 +94,8 @@ export function KanbanBoard({ projectId, onOpen }: Props) {
                 {byStatus[col.key].map((task) => (
                   <article
                     key={task.id}
-                    draggable
-                    onDragStart={() => setDragId(task.id)}
+                    draggable={canDrag}
+                    onDragStart={() => canDrag && setDragId(task.id)}
                     onDragEnd={() => { setDragId(null); setDraggingOver(null); }}
                     onClick={() => onOpen(task.id)}
                     className={`bg-white rounded-lg border border-slate-200 p-2.5 cursor-pointer shadow-xs hover:shadow-md transition-shadow select-none ${

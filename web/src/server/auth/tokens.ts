@@ -60,6 +60,7 @@ export async function rotate(rawRefreshToken: string, ip: string | null): Promis
   if (!parsed) throw new Unauthorized('Invalid refresh token');
   const row = await prisma.refreshToken.findUnique({ where: { tokenHash: parsed.hash } });
   if (!row) throw new Unauthorized('Invalid refresh token');
+  if (row.id !== parsed.id) throw new Unauthorized('Invalid refresh token');
   if (row.revokedAt || row.replacedById) {
     // Reuse detected: revoke the entire family to invalidate all tokens in this lineage
     await revokeFamily(row.familyId);
@@ -90,5 +91,7 @@ export async function revokeByRawToken(rawRefreshToken: string): Promise<void> {
   const parsed = parseRefresh(rawRefreshToken);
   if (!parsed) return;
   const row = await prisma.refreshToken.findUnique({ where: { tokenHash: parsed.hash } });
-  if (row) await revokeFamily(row.familyId);
+  if (!row) return;
+  if (row.id !== parsed.id) return;
+  await revokeFamily(row.familyId);
 }

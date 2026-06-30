@@ -2,6 +2,43 @@
 
 Per `CLAUDE.md` golden rule #1, every deviation from the spec is recorded here with a reason.
 
+## 2026-06-30 — Phase 0+1: Next.js auth subsystem refactor (final fixes)
+
+### Summary
+Auth subsystem ported from NestJS `backend/` into Next.js `web/src/server/` (tokens, rbac,
+passwords, auth service, audit, route handlers). This enables the web tier to own its own auth
+without proxying to the backend, and prepares for the Vite → Next.js migration.
+
+### Intentional divergences from the backend
+
+**Fixed a latent backend bug — `replacedById` forward chain:**
+In `backend/src/auth/tokens.service.ts`, `replacedById` was set to the OLD (incoming) token's id.
+The Next.js port (`web/src/server/auth/tokens.ts`) sets it to the newly-minted replacement token's
+id — the correct forward chain, so the revocation trail reads in chronological order
+(old → new → newer, not a self-loop on the old row).
+
+**Added defense-in-depth — refresh token id verification:**
+Refresh rotation now also verifies that the presented token id matches the stored DB row
+(`row.id === parsed.id`). The backend did not perform this check. Prevents a class of timing
+attacks where a valid signature is presented but for a different token row.
+
+**`login` response `lastLoginAt` — post-update timestamp:**
+The Next.js port returns the `lastLoginAt` value written during the current login (post-update),
+so the response reflects the current login time. The backend returned the pre-update value
+(the previous login time). Harmless display-only divergence; the DB row is correct in both cases.
+
+### Other structural changes
+
+- Legacy Vite source quarantined to `web/legacy/` (excluded from tsconfig), to be removed in a
+  later phase once feature parity is confirmed.
+- Next.js dev server runs on port 3002 during the transition (backend still on 3001).
+- `@prisma/client` moved from `devDependencies` → `dependencies` in `web/package.json` so it is
+  available at runtime (server components and API routes call Prisma directly).
+- `readJson()` helper added to `web/src/server/http/request.ts`: wraps `req.json()` and maps
+  `SyntaxError` (malformed/empty body) to a 400 BAD REQUEST instead of an unhandled 500.
+- `resetConfig()` export added to `web/src/server/config.ts` for test isolation (lets a test
+  re-read a mutated `process.env` without the cached value interfering).
+
 ## 2026-06-30 — Switched pnpm → npm workspaces
 
 At the operator's request (wants `npm run dev`). `CLAUDE.md` §1 specifies pnpm; this is a

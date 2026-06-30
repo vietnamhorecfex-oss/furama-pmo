@@ -39,3 +39,8 @@ export function getConfig(): AppConfig {
   if (!cached) cached = validateEnv(process.env as Record<string, unknown>);
   return cached;
 }
+
+/** Test-only: clear the cached config so a test can re-read mutated env. */
+export function resetConfig(): void {
+  cached = null;
+}

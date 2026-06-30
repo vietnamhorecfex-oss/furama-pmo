@@ -2,10 +2,10 @@ import { NextResponse } from 'next/server';
 import { registerSchema } from '@furama/shared';
 import { route } from '../../../../../server/http/envelope';
 import { registerUser } from '../../../../../server/auth/service';
-import { clientIp } from '../../../../../server/http/request';
+import { clientIp, readJson } from '../../../../../server/http/request';
 
 export const POST = route(async (req) => {
-  const dto = registerSchema.parse(await req.json());
+  const dto = registerSchema.parse(await readJson(req));
   const out = await registerUser(dto, clientIp(req));
   return NextResponse.json(out, { status: 201 });
 });

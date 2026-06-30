@@ -15,5 +15,11 @@ export function setRefreshCookie(res: NextResponse, tokens: IssuedTokens): void 
 }
 
 export function clearRefreshCookie(res: NextResponse): void {
-  res.cookies.set(REFRESH_COOKIE, '', { httpOnly: true, path: '/', maxAge: 0 });
+  res.cookies.set(REFRESH_COOKIE, '', {
+    httpOnly: true,
+    secure: getConfig().COOKIE_SECURE,
+    sameSite: 'strict',
+    path: '/',
+    maxAge: 0,
+  });
 }

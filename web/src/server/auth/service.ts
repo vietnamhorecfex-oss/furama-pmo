@@ -3,7 +3,7 @@ import { prisma } from '../prisma';
 import { hashPassword, verifyPassword, needsRehash } from './passwords';
 import { issueOnLogin, rotate, revokeByRawToken, verifyAccess, type IssuedTokens } from './tokens';
 import { auditRecord } from '../audit/audit';
-import { Conflict, Unauthorized } from '../http/errors';
+import { Conflict, NotFound, Unauthorized } from '../http/errors';
 
 export function toPublicUser(user: {
   id: string;
@@ -99,7 +99,7 @@ export async function logoutSession(rawRefresh?: string): Promise<void> {
 
 export async function getMe(userId: string): Promise<MeResponse> {
   const u = await prisma.user.findUnique({ where: { id: userId } });
-  if (!u) throw new Unauthorized('User not found');
+  if (!u) throw new NotFound('User not found');
   const memberships = await prisma.projectMember.findMany({
     where: { userId },
     select: { projectId: true, role: true, memberLabel: true },
@@ -107,4 +107,3 @@ export async function getMe(userId: string): Promise<MeResponse> {
   return { user: toPublicUser(u), memberships };
 }
 
-export { verifyAccess };

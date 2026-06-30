@@ -20,4 +20,20 @@ describe('auth service', () => {
   it('rejects a wrong password with a generic 401', async () => {
     await expect(loginUser({ email, password: 'wrong' } as any, null)).rejects.toThrow(/invalid email or password/i);
   });
+
+  it('rejects an unknown email with the same generic 401', async () => {
+    await expect(
+      loginUser({ email: `nobody-unknown-${Date.now()}@acme.test`, password: 'whatever' } as any, null),
+    ).rejects.toThrow(/invalid email or password/i);
+  });
+
+  it('rejects an inactive user with the same generic 401', async () => {
+    // the user registered in the first test exists; deactivate and try to log in
+    await prisma.user.updateMany({ where: { email }, data: { isActive: false } });
+    await expect(
+      loginUser({ email, password: 'Sup3rSecret!' } as any, null),
+    ).rejects.toThrow(/invalid email or password/i);
+    // reactivate so other ordering is not affected (afterAll cleans up regardless)
+    await prisma.user.updateMany({ where: { email }, data: { isActive: true } });
+  });
 });

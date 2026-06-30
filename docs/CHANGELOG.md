@@ -2,6 +2,41 @@
 
 Per `CLAUDE.md` golden rule #1, every deviation from the spec is recorded here with a reason.
 
+## 2026-06-30 — Switched pnpm → npm workspaces
+
+At the operator's request (wants `npm run dev`). `CLAUDE.md` §1 specifies pnpm; this is a
+deliberate deviation.
+
+- Root `package.json`: added `"workspaces": ["shared","backend","web"]`, removed `packageManager`,
+  rewrote scripts to npm (`-w`, `--workspaces --if-present`). Parallel dev now uses `concurrently`
+  (npm has no `pnpm --parallel`), added as a root devDependency. `npm run dev` builds `@furama/shared`
+  once, then runs all three watchers concurrently.
+- `workspace:*` → `*` in `backend`/`web` (npm resolves `*` to the local workspace package).
+- Deleted `pnpm-lock.yaml` and `pnpm-workspace.yaml`; `package-lock.json` is now the lockfile.
+
+### Backend dev port 3000 → 3001
+Port `3000` on the dev machine is permanently held by an unrelated `next-server` process. Moved the
+backend to `3001`: `API_PORT=3001` in `.env` and `BACKEND` const in `web/vite.config.ts`. The web
+client uses relative paths through the Vite proxy, so no other change was needed.
+
+## 2026-06-30 — Dropped Docker + Redis (local dev)
+
+### Removed Docker
+At the operator's request, local dev no longer uses Docker. Deleted `infra/docker-compose.yml`
+and the `infra:up` / `infra:down` root scripts. Postgres is now expected to run natively on the
+host (PostgreSQL 18, Homebrew) on the default port `5432`; `.env` `DATABASE_URL` points at the
+local system user (`postgresql://bcmac@localhost:5432/furama_pmo`).
+
+### Removed Redis
+Redis was declared in spec (sessions / rate-limit / ws pub-sub) but **never wired into the code**:
+no `redis`/`ioredis` dependency existed. The only references were a `REDIS_URL` entry in the env
+schema and a "can plug redis-adapter later" comment in `realtime.gateway.ts`. Removed `REDIS_URL`
+from `env.ts` and `.env`/`.env.example`, and updated the gateway comment.
+
+Functional impact: **none.** Rate-limiting already uses `@nestjs/throttler` with its in-memory
+store; the realtime gateway already uses the in-memory socket.io adapter. Consequence: the backend
+is single-instance only (no horizontal fan-out) — acceptable for this deployment.
+
 ## 2026-06-28 — M0 scaffolding
 
 ### Fixed: `prisma/schema.prisma` did not parse

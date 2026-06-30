@@ -14,7 +14,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@furama/shared": "workspace:*",
+    "@furama/shared": "*",
     "@tanstack/react-query": "^5.51.23",
     "axios": "^1.7.4",
     "react": "^18.3.1",

@@ -10,9 +10,8 @@
  * `project:<pid>`. Without this, a hostile client could join any room and listen in — which
  * is exactly the "cross-project leakage" R-05 asserts against.
  *
- * Fan-out: a single `emit(projectId, event, payload)` API for services. In-memory adapter
- * is used by default; the @socket.io/redis-adapter can be plugged at AppModule level later
- * when we scale horizontally (docs/01 §5 — multi-instance fan-out).
+ * Fan-out: a single `emit(projectId, event, payload)` API for services. Uses the in-memory
+ * adapter (single-instance). Horizontal scaling out of scope for this deployment.
  */
 import { Logger } from '@nestjs/common';
 import {

@@ -8,9 +8,17 @@ Target chosen: **Vercel serverless + self-managed PostgreSQL** (not Neon). A con
 (PgBouncer, transaction mode) in front of Postgres is required for serverless.
 
 - **Serverless DB.** Prisma datasource gained `directUrl = env("DIRECT_URL")` — runtime uses the
-  POOLED connection (`DATABASE_URL` → PgBouncer), migrations use the DIRECT Postgres endpoint. Local
-  dev sets both equal. `web/src/server/prisma.ts` already uses a singleton client (safe for warm
-  serverless instances).
+  POOLED connection (→ PgBouncer), migrations use the DIRECT Postgres endpoint.
+  `web/src/server/prisma.ts` uses a singleton client (safe for warm serverless instances).
+- **Discrete DB env vars (no monolithic DATABASE_URL).** The DB is configured with individual
+  `POSTGRES_HOST/PORT/USER/PASSWORD/DB/SCHEMA/SSLMODE` (+ optional `POSTGRES_POOL_HOST/PORT` for the
+  serverless pooler). `web/src/server/db-url.ts` composes the pooled URL for the runtime client
+  (passed via `PrismaClient({ datasources: { db: { url } } })`); `scripts/db-env.mjs` composes
+  `DATABASE_URL`/`DIRECT_URL` just-in-time for the Prisma CLI (`postinstall`, `db:generate`,
+  `db:migrate*`, `db:seed` all route through it; `--direct` sets `PRISMA_DIRECT=1` so seeding &
+  migrations bypass the pooler). Back-compat: if `POSTGRES_HOST` is unset but `DATABASE_URL`/
+  `DIRECT_URL` exist, those are used verbatim. Verified: `db:generate`, 170 tests, `next build`, and
+  `db:seed` (628 tasks) all green through the composed path.
 - **Build wiring.** Root `postinstall: prisma generate` guarantees the client exists after any
   `npm install` (local + Vercel). Root `vercel.json` added: `installCommand npm install`,
   `buildCommand npm run build -w @furama/web`, `outputDirectory web/.next`, `framework nextjs`.

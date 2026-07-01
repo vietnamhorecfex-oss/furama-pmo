@@ -10,7 +10,7 @@
     "web"
   ],
   "scripts": {
-    "postinstall": "prisma generate --schema ./prisma/schema.prisma",
+    "postinstall": "node scripts/db-env.mjs prisma generate --schema ./prisma/schema.prisma",
     "build": "npm run build --workspaces --if-present",
     "dev": "npm run build -w @furama/shared && concurrently -n shared,web -c blue,magenta \"npm run dev -w @furama/shared\" \"npm run dev -w @furama/web\"",
     "lint": "npm run lint --workspaces --if-present",
@@ -18,9 +18,10 @@
     "test": "npm run test --workspaces --if-present",
     "test:cov": "npm run test:cov --workspaces --if-present",
     "test:e2e": "npm run test:e2e -w @furama/web",
-    "db:generate": "prisma generate --schema ./prisma/schema.prisma",
-    "db:migrate": "prisma migrate dev --schema ./prisma/schema.prisma",
-    "db:seed": "tsx db/scripts/seed.ts"
+    "db:generate": "node scripts/db-env.mjs prisma generate --schema ./prisma/schema.prisma",
+    "db:migrate": "node scripts/db-env.mjs --direct prisma migrate dev --schema ./prisma/schema.prisma",
+    "db:migrate:deploy": "node scripts/db-env.mjs --direct prisma migrate deploy --schema ./prisma/schema.prisma",
+    "db:seed": "node scripts/db-env.mjs --direct tsx db/scripts/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "5.22.0"

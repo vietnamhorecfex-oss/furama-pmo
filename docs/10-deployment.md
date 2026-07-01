@@ -54,7 +54,10 @@ npm run db:seed            # tsx db/scripts/seed.ts → 628 tasks, idempotent
 
 1. Import the GitHub repo into Vercel.
 2. Set **Environment Variables** (Production + Preview) — mirror `.env.example`:
-   - `DATABASE_URL` (pooled / PgBouncer), `DIRECT_URL` (direct Postgres)
+   - Postgres (discrete vars): `POSTGRES_HOST`, `POSTGRES_PORT` (direct, 5432), `POSTGRES_USER`,
+     `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_SCHEMA`, `POSTGRES_SSLMODE=require`
+   - Pooler (runtime): `POSTGRES_POOL_HOST`, `POSTGRES_POOL_PORT` (PgBouncer, e.g. 6432). The app
+     composes the pooled URL for queries and the direct URL for migrations automatically.
    - `JWT_ACCESS_SECRET` (strong ≥32-char random), `JWT_ACCESS_TTL`, `REFRESH_TTL_DAYS`
    - `ARGON2_MEMORY_KIB`, `ARGON2_TIME_COST`, `ARGON2_PARALLELISM`
    - `COOKIE_SECURE=true` (HTTPS), `WEB_ORIGIN=https://<your-domain>`

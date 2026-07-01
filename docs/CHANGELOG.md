@@ -4,10 +4,30 @@ Per `CLAUDE.md` golden rule #1, every deviation from the spec is recorded here w
 
 ## 2026-07-01 — Phase 4: AI assistant engine port
 
+Ported `backend/src/ai/` (assistant tool-use engine, chat/action routes, notifications, knowledge
+search) to the Next.js server layer. Blocking request model (no streaming) per decision; chat route
+carries `export const maxDuration = 60` (Vercel Hobby-safe). Constructor DI replaced by an env-based
+Anthropic client seam (`getAnthropicClient()`) plus a `deps.client` injection point so tests never
+hit the network. `AssistantService` split into `web/src/server/ai/assistant.ts` (engine + knowledge)
+and `web/src/server/ai/notifications.ts`. `auditRecord` calls gain `ip: null` (the ported
+`AuditActor` interface added `ip` in Phase 1). All 5 endpoints, all 13 tools (6 read + 7 write),
+and the PROPOSED→EXECUTED/REJECTED action state machine reproduced faithfully; system-prompt
+safety block copied verbatim. 15 new tests (assistant 9, notifications 6); full suite 159/159.
+
 ### Deviations from the design spec / backend
 - **AI assistant port (Phase 4):** `create_config_item`/workstream track default changed from `'EXE'`
   (backend bug — not a valid `WorkstreamTrack` enum value, would throw at Prisma runtime) to
   `'OPERATIONS'`.
+
+### Known inherited limitations (faithful ports of backend bugs — deferred to Phase 6/7)
+- **`create_task` AI tool bypasses zod defaults.** The `create_task` write dispatch builds the DTO
+  by hand and casts past `createTaskSchema.parse()` (1:1 with backend `assistant.service.ts:503`).
+  When the model omits `budgetVnd`/`actualVnd`, `createTask` runs `BigInt(undefined)` → throws. This
+  is safely contained: the throw happens inside `confirmAction`'s try/catch, so the action is marked
+  `FAILED` and surfaced — no partial write or corruption. Fix (parse through `createTaskSchema` in
+  the dispatch, which would also fix the backend) deferred to Phase 6/7.
+- **`bulk_update_progress` swallows per-task errors** with a bare `catch` → "skipped" (faithful to
+  backend); the skip reason is not surfaced to the model. Observability improvement deferred.
 
 ## 2026-07-01 — Phase 3: analytics & IO port (budget, dashboard, milestones, import-export)
 

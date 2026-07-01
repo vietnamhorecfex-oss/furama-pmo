@@ -1,3 +1,4 @@
+'use client';
 import { useMutation } from '@tanstack/react-query';
 import type { LoginResponse } from '@furama/shared';
 import { api } from '../../lib/api-client';

@@ -1,3 +1,4 @@
+'use client';
 import { useQuery } from '@tanstack/react-query';
 import type { ProjectDto } from '@furama/shared';
 import { api } from '../../lib/api-client';

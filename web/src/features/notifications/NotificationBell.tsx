@@ -1,3 +1,4 @@
+'use client';
 /**
  * Notification bell — fetches from GET /projects/:pid/notifications,
  * shows unread badge, marks individual items read on click.

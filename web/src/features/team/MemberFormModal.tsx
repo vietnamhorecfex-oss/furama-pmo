@@ -1,3 +1,4 @@
+'use client';
 /**
  * Add/Edit member modal. Add mode takes a raw userId (until a user-search/invite flow
  * exists); edit mode locks the userId and lets you change role, label, and — for a

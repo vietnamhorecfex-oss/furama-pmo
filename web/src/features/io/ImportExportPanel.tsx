@@ -1,3 +1,4 @@
+'use client';
 /**
  * C-05 — Import/Export panel.
  *

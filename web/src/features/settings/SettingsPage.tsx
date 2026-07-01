@@ -1,3 +1,4 @@
+'use client';
 /**
  * C-03 — Settings page: project meta block + 5 config-dimension lists in tabs.
  * Editing is OWNER/PM-only on the server; the UI still shows the controls — failed mutations

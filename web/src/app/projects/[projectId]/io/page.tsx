@@ -1,3 +1,8 @@
+'use client';
+import { useParams } from 'next/navigation';
+import { ImportExportPanel } from '@/features/io/ImportExportPanel';
+
 export default function Page() {
-  return <div className="p-4 text-slate-400">…</div>;
+  const { projectId } = useParams<{ projectId: string }>();
+  return <ImportExportPanel projectId={projectId} />;
 }

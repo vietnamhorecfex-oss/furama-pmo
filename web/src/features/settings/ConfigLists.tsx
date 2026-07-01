@@ -1,3 +1,4 @@
+'use client';
 /**
  * C-03 — Config dimension lists: phases / workstreams / statuses / priorities / budget
  * categories. Each list supports create + delete. Edit + reorder happen via the REST API

@@ -1,3 +1,4 @@
+'use client';
 /**
  * C-04 — Team & permissions: member cards (avatar, role, workstream scope, task-label usage),
  * add/edit via modal, remove with confirm, and a static role→capability matrix. Task counts

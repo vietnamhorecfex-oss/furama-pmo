@@ -1,3 +1,4 @@
+'use client';
 /**
  * M8 — AI Assistant chat panel.
  *

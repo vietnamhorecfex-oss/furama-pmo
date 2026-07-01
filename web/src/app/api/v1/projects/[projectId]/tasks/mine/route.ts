@@ -5,6 +5,6 @@ import { myTasks } from '@/server/tasks/tasks';
 
 export const GET = route(async (req, ctx) => {
   const auth = getAuthContext(req);
-  const { projectId } = ctx.params;
+  const { projectId } = await ctx.params;
   return NextResponse.json(await myTasks(auth, projectId), { status: 200 });
 });

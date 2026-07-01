@@ -98,6 +98,7 @@ export async function deletePriorityDef(
   if (!prio) throw new NotFound('PriorityDef not found');
 
   const referenced = await prisma.task
+    // as never: Task.status/priority is a Prisma enum in v1; def keys are free text — the guarded count treats a non-enum key as 0 refs (see file header).
     .count({ where: { projectId, priority: prio.key as never } })
     .catch(() => 0);
 
@@ -111,6 +112,7 @@ export async function deletePriorityDef(
     if (!replacement) throw new BadRequest(`replaceWithKey "${opts.replaceWithKey}" not found`);
     await prisma.$transaction([
       prisma.task.updateMany({
+        // as never: Task.status/priority is a Prisma enum in v1; def keys are free text — the guarded count treats a non-enum key as 0 refs (see file header).
         where: { projectId, priority: prio.key as never },
         data: { priority: opts.replaceWithKey as never },
       }),

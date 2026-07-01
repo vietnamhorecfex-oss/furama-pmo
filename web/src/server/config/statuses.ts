@@ -113,6 +113,7 @@ export async function deleteStatusDef(
   // when the def's key matches one of the canonical enum values used by Task. We treat any
   // tasks bearing the matching enum value as referenced.
   const referenced = await prisma.task
+    // as never: Task.status/priority is a Prisma enum in v1; def keys are free text — the guarded count treats a non-enum key as 0 refs (see file header).
     .count({ where: { projectId, status: status.key as never } })
     .catch(() => 0);
 
@@ -128,6 +129,7 @@ export async function deleteStatusDef(
     if (!replacement) throw new BadRequest(`replaceWithKey "${opts.replaceWithKey}" not found`);
     await prisma.$transaction([
       prisma.task.updateMany({
+        // as never: Task.status/priority is a Prisma enum in v1; def keys are free text — the guarded count treats a non-enum key as 0 refs (see file header).
         where: { projectId, status: status.key as never },
         data: { status: opts.replaceWithKey as never },
       }),

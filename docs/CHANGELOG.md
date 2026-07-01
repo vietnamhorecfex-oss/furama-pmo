@@ -2,6 +2,42 @@
 
 Per `CLAUDE.md` golden rule #1, every deviation from the spec is recorded here with a reason.
 
+## 2026-07-01 — Phase 2: Next.js vertical-slice port (services + route handlers + integration tests)
+
+### Execution strategy — vertical slices instead of design-spec's P2/P3 split
+The handoff spec described P2 as "all services" and P3 as "all route handlers". Phase 2 was instead
+executed as **vertical slices**: each module ships a service + route handler(s) + integration tests
+together, satisfying the CLAUDE.md DoD in one pass. Reason: the DoD requires a tested endpoint per
+feature; splitting service and routes across phases would leave untested code between milestones.
+
+### Modules ported (all in `web/src/`)
+- **projects** — list, create, get, update, archive (`server/projects/`, `app/api/v1/projects/`)
+- **config** — phases, workstreams, statuses, priorities, budget-categories (CRUD + reorder +
+  delete-with-replacement) (`server/config/`, `app/api/v1/projects/[projectId]/{phases,workstreams,statuses,priorities,budget-categories}/`)
+- **members** — list, invite, update role, remove (`server/members/`, `app/api/v1/projects/[projectId]/members/`)
+- **tasks** — list, create, get, update, delete, progress, assignments, dependencies, mine
+  (incl. invariant enforcement + dependency-cycle detection)
+  (`server/tasks/`, `app/api/v1/{projects/[projectId]/tasks,tasks/[id]/}`)
+- **comments** — list, create, delete (`server/comments/`, `app/api/v1/tasks/[id]/comments/`)
+
+### WebSocket `realtime.emit` calls DROPPED in ported services
+The Next.js service ports do not call a `realtime.emit` equivalent. The backend's
+`RealtimeGateway` is NestJS/socket.io-specific and not available in the Next.js runtime.
+**Realtime becomes client polling in Phase 5.** Emit sites are commented in the corresponding
+backend service source (`backend/src/tasks/tasks.service.ts`, etc.) so the integration point
+is traceable when WS is wired.
+
+### Money (VND BigInt) serialization
+`Response.json()` cannot serialize `BigInt`. A `moneyToNumber` helper converts VND `BigInt`
+fields to `Number` at every DTO boundary before JSON serialization; callers write back
+money fields with `BigInt(value)`. `BigInt` remains the DB representation.
+
+### Known deferred item — `listProjects` org-scoping
+`listProjects` filters on membership (user is a member of the project) only — no explicit `orgId`
+filter. This is a faithful port of the backend's `findMany({ where: { members: { some: { userId } } } })`.
+Cross-tenant isolation is enforced by the membership join at the DB level. A dedicated cross-tenant
+test will be added in M7 hardening to pin this guarantee explicitly.
+
 ## 2026-06-30 — Phase 0+1: Next.js auth subsystem refactor (final fixes)
 
 ### Summary

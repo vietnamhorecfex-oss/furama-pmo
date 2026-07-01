@@ -1,3 +1,4 @@
+'use client';
 /**
  * CalendarView — monthly task calendar, tasks pinned to their deadline date.
  * Color-coded by status. Click task chip to open drawer.

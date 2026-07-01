@@ -1,3 +1,10 @@
+'use client';
+import { useParams, usePathname, useRouter } from 'next/navigation';
+import { TasksTable } from '@/features/tasks/TasksTable';
+
 export default function Page() {
-  return <div className="p-4 text-slate-400">…</div>;
+  const { projectId } = useParams<{ projectId: string }>();
+  const router = useRouter();
+  const pathname = usePathname();
+  return <TasksTable projectId={projectId} onOpen={(id) => router.push(`${pathname}?task=${id}`)} />;
 }

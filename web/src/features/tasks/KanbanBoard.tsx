@@ -1,13 +1,13 @@
+'use client';
 /**
  * W-05 — Kanban board with HTML5 native drag.
- * Real-time sync via WS → TanStack Query invalidation (ws.ts).
- * Shows a live/syncing indicator in the header.
+ * Polling replaces WS for data sync. Shows a live/syncing indicator in the header.
  */
 import { useState } from 'react';
 import type { TaskDto, TaskStatus } from '@furama/shared';
 import { useAllTasks, useUpdateProgress } from './useTasks';
-import { useI18n } from '../../lib/i18n';
-import { usePermissions } from '../../lib/permissions';
+import { useI18n } from '@/lib/i18n';
+import { usePermissions } from '@/lib/permissions';
 
 interface Props {
   projectId: string;

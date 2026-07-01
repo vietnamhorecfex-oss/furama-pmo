@@ -1,3 +1,4 @@
+'use client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   AuditLogDto,
@@ -6,12 +7,14 @@ import type {
   ProgressUpdateDto,
   TaskDto,
 } from '@furama/shared';
-import { api } from '../../lib/api-client';
+import { api } from '@/lib/api-client';
+import { POLL_MS } from '@/lib/query-client';
 
 export function useTasks(projectId: string | undefined, query: Partial<ListTasksQuery>) {
   return useQuery({
     enabled: !!projectId,
     queryKey: ['tasks', projectId, query],
+    refetchInterval: POLL_MS,
     queryFn: async (): Promise<Paginated<TaskDto>> => {
       const { data } = await api.get<Paginated<TaskDto>>(`/projects/${projectId}/tasks`, {
         params: query,
@@ -37,6 +40,7 @@ export function useAllTasks(
   return useQuery({
     enabled: !!projectId,
     queryKey: ['tasks', projectId, 'all', sort, order, cap],
+    refetchInterval: POLL_MS,
     queryFn: async (): Promise<{ tasks: TaskDto[]; total: number; truncated: boolean }> => {
       const pageSize = 100;
       const fetchPage = async (page: number) => {
@@ -64,6 +68,7 @@ export function useTask(taskId: string | undefined) {
   return useQuery({
     enabled: !!taskId,
     queryKey: ['task', taskId],
+    refetchInterval: POLL_MS,
     queryFn: async (): Promise<TaskDto> => {
       const { data } = await api.get<TaskDto>(`/tasks/${taskId}`);
       return data;

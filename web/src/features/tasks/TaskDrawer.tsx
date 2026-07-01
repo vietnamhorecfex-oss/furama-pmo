@@ -1,3 +1,4 @@
+'use client';
 /**
  * W-06 — Slide-over drawer: task detail, progress editor, update history, comment thread.
  * Closes on Esc or backdrop click. Progress + comment writes are enforced server-side; the
@@ -7,9 +8,9 @@ import { useEffect, useState } from 'react';
 import type { AuditLogDto, TaskDto, TaskStatus } from '@furama/shared';
 import { useTask, useTaskHistory, useUpdateProgress, useUpdateTask } from './useTasks';
 import { useAddComment, useComments } from '../comments/useComments';
-import { useI18n } from '../../lib/i18n';
-import { usePermissions } from '../../lib/permissions';
-import { formatVnd, formatVndFull } from '../../lib/format';
+import { useI18n } from '@/lib/i18n';
+import { usePermissions } from '@/lib/permissions';
+import { formatVnd, formatVndFull } from '@/lib/format';
 
 interface Props {
   taskId: string;

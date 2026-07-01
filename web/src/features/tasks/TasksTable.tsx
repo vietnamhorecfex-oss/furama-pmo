@@ -1,3 +1,4 @@
+'use client';
 /**
  * W-04 — Tasks table: rich columns (dept / PIC / start / deadline / schedule health),
  * client-side filtering + sorting + pagination over the full task set, and inline status
@@ -8,9 +9,9 @@ import { useMemo, useState } from 'react';
 import type { Priority, TaskDto, TaskStatus } from '@furama/shared';
 import { useAllTasks, useUpdateProgress } from './useTasks';
 import { useWorkstreams } from '../team/useWorkstreams';
-import { useI18n } from '../../lib/i18n';
-import { usePermissions } from '../../lib/permissions';
-import { scheduleHealth, HEALTH_STYLE, type Health } from '../../lib/schedule';
+import { useI18n } from '@/lib/i18n';
+import { usePermissions } from '@/lib/permissions';
+import { scheduleHealth, HEALTH_STYLE, type Health } from '@/lib/schedule';
 
 const STATUSES: TaskStatus[] = ['NOT_STARTED', 'IN_PROGRESS', 'IN_REVIEW', 'BLOCKED', 'COMPLETED'];
 const PRIORITIES: Priority[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];

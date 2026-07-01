@@ -11,7 +11,7 @@ describe('validateEnv', () => {
       DATABASE_URL: 'postgresql://x@localhost/y',
       JWT_ACCESS_SECRET: 'x'.repeat(32),
     });
-    expect(c.API_PORT).toBe(3000);
+    expect(c.WEB_ORIGIN).toBe('http://localhost:3002');
     expect(c.COOKIE_SECURE).toBe(false);
   });
 });

@@ -16,6 +16,7 @@ import { assertCan } from '../rbac/rbac';
 import type { AuthContext } from '../rbac/rbac';
 import { auditRecord } from '../audit/audit';
 import { NotFound, Conflict } from '../http/errors';
+import { uniqueClash } from './config-util';
 
 // ─── public API ───────────────────────────────────────────────────────────────
 
@@ -126,11 +127,3 @@ export async function reorderPhases(
   );
 }
 
-// ─── private helpers ──────────────────────────────────────────────────────────
-
-/** Translate Prisma's unique-violation P2002 into a friendly Conflict. */
-function uniqueClash(err: unknown, friendly: string): Error {
-  const code = (err as { code?: string }).code;
-  if (code === 'P2002') return new Conflict(friendly);
-  return err as Error;
-}

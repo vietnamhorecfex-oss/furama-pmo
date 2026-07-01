@@ -2,6 +2,38 @@
 
 Per `CLAUDE.md` golden rule #1, every deviation from the spec is recorded here with a reason.
 
+## 2026-07-01 — Phase 3: analytics & IO port (budget, dashboard, milestones, import-export)
+
+Ported the computation/IO modules into Next.js (`web/src/server/**` + route handlers), same
+vertical-slice pattern as Phase 2. All money serialized via `moneyToNumber`; WS emits stay dropped.
+
+### Deviations from the design spec / backend
+- **AI + notifications deferred to Phase 4.** The design spec listed the AI assistant under Phase 3;
+  it was split out into its own phase because it is the largest module, depends on budget/dashboard/
+  tasks/comments/config being ported first, and carries its own streaming/`maxDuration` decisions.
+- **Import column strictness relaxed (import-export).** The backend `indexer` throws
+  `BadRequestException` for ANY referenced seed column that is absent (all ~24 columns effectively
+  required). The Next port instead requires only a task-code column (`id` **or** `code`) and tolerates
+  other missing columns via `safeGet` fallbacks — this supports simplified/hand-built partial seeds
+  (the web import UI does not always send all 24 columns). Consequence: a malformed partial payload
+  that the backend would 400 now imports with defaulted fields and returns 200. The real 24-column
+  `db/seed/tasks.seed.json` is unaffected. A missing code column still returns 400.
+- **Import track column:** the port reads the workstream track from the `project` column first, with a
+  `workstream` fallback (the real seed uses `project` for the track key; the fallback supports the
+  simplified seed). This fixes a bug where a real seed would have dumped all tasks into the PMO track.
+- **Dashboard budget concurrency:** the port runs the main aggregation `$transaction` and
+  `budgetSummary` via `Promise.all` (the backend ran them sequentially) — a latency improvement, same
+  result.
+
+### Performance carry-notes (Phase 7 hardening — functionally correct today)
+- `dashboardOverview` issues ~18 DB queries/request; `importPackedSeed` uses a sequential row loop
+  (~N× per-row queries); `listMilestones` hydrate is N×2 queries. All carry inline `// PERF` comments.
+  Batch these + set Vercel `maxDuration` when deploying.
+
+### rbac.ts
+- `leadOwnsWorkstream` was made `export` (visibility only, no logic change) so the milestone gate
+  helper can reuse it.
+
 ## 2026-07-01 — Phase 2: Next.js vertical-slice port (services + route handlers + integration tests)
 
 ### Execution strategy — vertical slices instead of design-spec's P2/P3 split

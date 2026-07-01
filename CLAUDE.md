@@ -2,6 +2,17 @@
 
 You are implementing the **Furama PMO** system from the specs in this repo. This file is your operating manual. Read it fully before writing code.
 
+> **⚠️ ARCHITECTURE MIGRATED (2026-07, Phases 0–6).** The system was refactored from a
+> NestJS backend + Vite SPA into a **single full-stack Next.js 14 app** (`web/`). The `backend/`
+> NestJS app has been **deleted**; all business logic now lives in `web/src/server/**` (plain
+> module functions) exposed through App Router route handlers under `web/src/app/api/v1/**`.
+> Docker and Redis were removed; the DB is native PostgreSQL. Package manager is **npm workspaces**
+> (`shared`, `web`), not pnpm. Realtime is **TanStack Query polling**, not WebSockets. See
+> `docs/CHANGELOG.md` (Phases 0–6) for the full deviation record. Sections 1–2 below describe the
+> ORIGINAL stack and are kept for historical spec context — follow the migrated reality where they
+> conflict. The RBAC matrix, data model, API contract (`api/openapi.yaml`), and security rules are
+> unchanged and still authoritative.
+
 ## 0. Golden rules
 
 1. **The specs are the contract.** `docs/` + `prisma/schema.prisma` + `api/openapi.yaml` define the system. If you must deviate, note it in `docs/CHANGELOG.md` with a reason.

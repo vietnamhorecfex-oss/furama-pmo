@@ -1,31 +1,27 @@
 /**
- * T-06 — Seed script. `pnpm db:seed`.
+ * Seed script. `npm run db:seed`.
  *
  * Idempotent bootstrap:
  *   1. Ensure an Organization with slug = SEED_ORG_SLUG.
  *   2. Ensure an admin User (`seed-admin@furama.test`) — password set so login works in dev.
  *   3. Ensure a Project named "Furama Grand Opening 2026" under that org, with the admin
  *      auto-added as OWNER.
- *   4. Read db/seed/tasks.seed.json and call ImportExportService.importPackedSeed.
+ *   4. Read db/seed/tasks.seed.json and call importPackedSeed.
  *
  * Re-running this script must leave the DB in the same state (628 tasks, no duplicates).
- * Idempotency lives at every step: organization.upsert, user upsert by email, project
- * existence check by (orgId,name), task upsert by (projectId,code).
+ * Idempotency lives at every step: organization.upsert, user find-or-create by email,
+ * project existence check by (orgId,name), task upsert by (projectId,code).
  *
- * NOTE: we instantiate services manually instead of going through Nest DI because
- * tsx/esbuild does not emit reliable decorator metadata for `reflect-metadata` — that
- * makes `Test.createTestingModule({ providers: [...] })` resolve constructor args as
- * `undefined`. For a one-shot script, plain `new` is simpler and more honest.
+ * Runs against the Next.js server layer (`web/src/server/**`) — the NestJS backend was
+ * removed in Phase 6. These server modules use plain relative imports and no Next.js
+ * runtime APIs on this path, so `tsx` executes them directly.
  */
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
 import { config as loadEnv } from 'dotenv';
-import { PrismaService } from '../../backend/src/prisma/prisma.service';
-import { AuditService } from '../../backend/src/audit/audit.service';
-import { RbacService } from '../../backend/src/rbac/rbac.service';
-import { ImportExportService } from '../../backend/src/import-export/import-export.service';
+import { prisma, dbHealthy } from '../../web/src/server/prisma';
+import { importPackedSeed } from '../../web/src/server/import-export/import-export';
 
 loadEnv({ path: resolve(__dirname, '../../.env') });
 
@@ -35,16 +31,9 @@ const SEED_ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? 'seed-admin@furama.test
 const SEED_ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? 'correctHorseBatteryStaple';
 
 async function main(): Promise<void> {
-  const prisma = new PrismaService();
-  await prisma.$connect();
-
-  const rbac = new RbacService(prisma);
-  const audit = new AuditService(prisma, rbac);
-  const importer = new ImportExportService(prisma, audit, rbac);
-
   console.log(`[seed] connecting to DB…`);
-  if (!(await prisma.isHealthy())) {
-    throw new Error('Postgres unreachable — start `pnpm infra:up` first');
+  if (!(await dbHealthy())) {
+    throw new Error('Postgres unreachable — check DATABASE_URL and that Postgres is running');
   }
 
   // 1. Org
@@ -101,7 +90,7 @@ async function main(): Promise<void> {
   const seedPath = resolve(__dirname, '../seed/tasks.seed.json');
   console.log(`[seed] reading ${seedPath}…`);
   const raw = JSON.parse(await readFile(seedPath, 'utf8'));
-  const result = await importer.importPackedSeed(
+  const result = await importPackedSeed(
     { userId: admin.id, orgId: org.id },
     project.id,
     raw,
@@ -113,8 +102,6 @@ async function main(): Promise<void> {
   console.log(`[seed] task count in DB: ${finalCount}`);
 
   await prisma.$disconnect();
-  // Silence the unused-import warning while keeping the type available for future Nest-driven seeds.
-  void ConfigService;
   if (finalCount !== 628) {
     throw new Error(`Expected 628 tasks after seed; got ${finalCount}`);
   }

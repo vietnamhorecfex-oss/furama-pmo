@@ -2,6 +2,35 @@
 
 Per `CLAUDE.md` golden rule #1, every deviation from the spec is recorded here with a reason.
 
+## 2026-07-01 — Phase 6: parity, backend removal, seed rewrite
+
+Verified full endpoint parity, then deleted the NestJS `backend/` app entirely. The Next.js server
+layer is now the sole implementation.
+
+### Parity gap found + closed
+- **Activity/audit READ endpoints were never ported** (`GET /projects/:pid/activity`,
+  `GET /projects/:pid/activity/history/:entityType/:entityId`). The migrated UI (ActivityFeed,
+  task-history in the drawer) already called them, so they were 404ing. Ported `feed` + `entityHistory`
+  (+ LEAD-scope helper, DTO mapper) to `web/src/server/audit/activity.ts` and added the two routes,
+  with the exact RBAC preserved (OWNER/PM full; LEAD scoped to own-workstream Task/Comment rows;
+  MEMBER/VIEWER denied). 10 new tests. A full backend↔web endpoint diff then showed 100% parity
+  (74 backend endpoints, all covered; the only diffs were cosmetic param names, e.g. comments
+  `:taskId`↔`:id`, and health/ready which exist under `/api/*`).
+
+### Backend deletion + fallout
+- **`backend/` deleted.** Removed from the npm `workspaces`; the root `dev` script no longer starts a
+  backend process (`concurrently` now runs shared-watch + web only).
+- **`@anthropic-ai/sdk` moved to `web` deps.** It was a `backend` dependency that `web/src/server/ai`
+  relied on via hoisting; deleting backend removed it and broke the web build. Now declared in
+  `web/package.json` (`^0.106.0`). (Latent coupling exposed by the deletion — fixed.)
+- **Seed script rewritten.** `db/scripts/seed.ts` imported four NestJS services from `backend/src`.
+  Rewritten to use the web server layer (`prisma`, `dbHealthy`, `importPackedSeed`) run via `tsx`.
+  Root `db:seed` is now `tsx db/scripts/seed.ts` (was `-w @furama/backend`); `tsx` + `dotenv` added to
+  root devDeps. Verified: still loads exactly **628 tasks**, idempotently (Golden Rule #4).
+- **`api/openapi.yaml` unchanged** — the route handlers still mirror it 1:1; it remains the API contract.
+- **CLAUDE.md** got a migration banner atop; sections 1–2 (original NestJS/pnpm stack) kept for spec
+  history but flagged as superseded.
+
 ## 2026-07-01 — Phase 5: App Router UI (route tree + feature migration + polling)
 
 Migrated the legacy Vite tab-workspace (`web/legacy/`) into the Next.js App Router. The single-page

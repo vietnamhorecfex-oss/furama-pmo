@@ -7,12 +7,11 @@
   },
   "workspaces": [
     "shared",
-    "backend",
     "web"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "dev": "npm run build -w @furama/shared && concurrently -n shared,backend,web -c blue,green,magenta \"npm run dev -w @furama/shared\" \"npm run dev -w @furama/backend\" \"npm run dev -w @furama/web\"",
+    "dev": "npm run build -w @furama/shared && concurrently -n shared,web -c blue,magenta \"npm run dev -w @furama/shared\" \"npm run dev -w @furama/web\"",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
@@ -20,14 +19,16 @@
     "test:e2e": "npm run test:e2e -w @furama/web",
     "db:generate": "prisma generate --schema ./prisma/schema.prisma",
     "db:migrate": "prisma migrate dev --schema ./prisma/schema.prisma",
-    "db:seed": "npm run db:seed -w @furama/backend"
+    "db:seed": "tsx db/scripts/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "5.22.0"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",
+    "dotenv": "^16.4.5",
     "prisma": "5.22.0",
+    "tsx": "^4.19.2",
     "typescript": "^5.5.4"
   }
 }

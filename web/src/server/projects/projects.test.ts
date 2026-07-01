@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '../prisma';
-import { createProject, listProjects, getProject, archiveProject } from './projects';
+import { createProject, listProjects, getProject, archiveProject, updateProjectMeta } from './projects';
 
 let orgId: string, userId: string, otherUserId: string;
 const ctx = () => ({ userId, orgId });
@@ -41,5 +41,35 @@ describe('projects', () => {
   it('archive is OWNER-only and rejects double-archive', async () => {
     await archiveProject(ctx(), pid, null);
     await expect(archiveProject(ctx(), pid, null)).rejects.toThrow(/archiv/i);
+  });
+
+  it('updateProjectMeta: partial update leaves other fields intact', async () => {
+    const p = await createProject(ctx(), { name: 'Meta', budgetCapVnd: 100 } as any, null);
+    const up = await updateProjectMeta(ctx(), p.id, { name: 'Meta2' } as any, null);
+    expect(up.name).toBe('Meta2');
+    expect(up.budgetCapVnd).toBe(100); // unspecified field unchanged
+  });
+
+  it('updateProjectMeta: rejects startDate after endDate (BadRequest)', async () => {
+    const p = await createProject(ctx(), { name: 'Dates', budgetCapVnd: 0 } as any, null);
+    await expect(
+      updateProjectMeta(ctx(), p.id, { startDate: '2026-12-31T00:00:00.000Z', endDate: '2026-01-01T00:00:00.000Z' } as any, null),
+    ).rejects.toThrow(/date|start|end|bad request/i);
+  });
+
+  it('updateProjectMeta: a non-manager member is Forbidden (MANAGE_CONFIG)', async () => {
+    const p = await createProject(ctx(), { name: 'Deny', budgetCapVnd: 0 } as any, null);
+    await prisma.projectMember.create({ data: { projectId: p.id, userId: otherUserId, role: 'MEMBER' } });
+    await expect(
+      updateProjectMeta({ userId: otherUserId, orgId }, p.id, { name: 'x' } as any, null),
+    ).rejects.toThrow(/forbidden|cannot/i);
+  });
+
+  it('archiveProject: a non-OWNER member is Forbidden (OWNER-only)', async () => {
+    const p = await createProject(ctx(), { name: 'ArchDeny', budgetCapVnd: 0 } as any, null);
+    await prisma.projectMember.create({ data: { projectId: p.id, userId: otherUserId, role: 'PM' } });
+    await expect(
+      archiveProject({ userId: otherUserId, orgId }, p.id, null),
+    ).rejects.toThrow(/forbidden|cannot|archive/i);
   });
 });

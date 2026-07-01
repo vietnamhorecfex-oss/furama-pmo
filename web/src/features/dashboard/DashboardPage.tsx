@@ -1,3 +1,4 @@
+'use client';
 /**
  * W-07 — Dashboard. KPI grid + progress bars by phase/workstream + countdown +
  * upcoming-deadlines list + budget snapshot.

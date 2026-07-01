@@ -1,3 +1,4 @@
+'use client';
 /**
  * C-02 — Activity feed: paginated audit rows for the project, scoped by role on the server
  * (OWNER/PM full; LEAD = own workstream tasks + comments; MEMBER/VIEWER = 403).

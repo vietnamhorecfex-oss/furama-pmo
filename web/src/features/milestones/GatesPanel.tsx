@@ -1,3 +1,4 @@
+'use client';
 /**
  * W-08 — Gates panel: lists milestones + gates with readiness bars and a status
  * dropdown for OWNER/PM/LEAD (server enforces RBAC; UI shows the dropdown to everyone

@@ -1,3 +1,4 @@
+'use client';
 /**
  * Budget edit mutations — set cap, set a category's planned amount, and bulk import.
  * All return/refresh the budget summary; cap/planned also touch the dashboard rollup.

@@ -1,3 +1,4 @@
+'use client';
 /**
  * Budget CSV round-trip helpers. Export writes a UTF-8-BOM CSV (opens cleanly in Excel)
  * with a leading __CAP__ row carrying the project cap, then one row per category. Import

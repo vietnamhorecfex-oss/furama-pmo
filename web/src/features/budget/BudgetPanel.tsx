@@ -1,3 +1,4 @@
+'use client';
 /**
  * W-08 — Budget management dashboard.
  * KPI strip (cap / planned / committed / actual / remaining) with cap-utilization bar,

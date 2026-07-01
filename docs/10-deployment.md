@@ -40,7 +40,7 @@ no Docker/Redis).
 
 ## 2. Apply the schema + seed (once, from your machine)
 
-With `DATABASE_URL`/`DIRECT_URL` pointed at Neon in your local `.env`:
+With `DATABASE_URL`/`DIRECT_URL` pointed at your production Postgres in your local `.env`:
 
 ```bash
 npm install
@@ -54,7 +54,7 @@ npm run db:seed            # tsx db/scripts/seed.ts → 628 tasks, idempotent
 
 1. Import the GitHub repo into Vercel.
 2. Set **Environment Variables** (Production + Preview) — mirror `.env.example`:
-   - `DATABASE_URL` (pooled Neon), `DIRECT_URL` (direct Neon)
+   - `DATABASE_URL` (pooled / PgBouncer), `DIRECT_URL` (direct Postgres)
    - `JWT_ACCESS_SECRET` (strong ≥32-char random), `JWT_ACCESS_TTL`, `REFRESH_TTL_DAYS`
    - `ARGON2_MEMORY_KIB`, `ARGON2_TIME_COST`, `ARGON2_PARALLELISM`
    - `COOKIE_SECURE=true` (HTTPS), `WEB_ORIGIN=https://<your-domain>`

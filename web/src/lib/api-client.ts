@@ -6,6 +6,7 @@
  * that would otherwise burn the rate limit (10/min/IP) and trigger family revocation.
  */
 import axios, { type AxiosError, type AxiosRequestConfig } from 'axios';
+import type { MeResponse } from '@furama/shared';
 import { useAuth } from './auth-store';
 
 export const api = axios.create({
@@ -41,6 +42,21 @@ async function refreshAccessTokenOnce(): Promise<string | null> {
     }
   })();
   return refreshInflight;
+}
+
+/**
+ * Cold-reload session bootstrap. On a hard reload the in-memory store is empty, so we
+ * cannot call a protected endpoint directly: the response interceptor deliberately skips
+ * its silent refresh for `/auth/*` URLs (to avoid retry loops on login/refresh). So we
+ * refresh explicitly from the httpOnly `furama_refresh` cookie first, then load the
+ * profile with the fresh token. Throws if there is no valid session.
+ */
+export async function bootstrapSession(): Promise<MeResponse['user']> {
+  const fresh = await refreshAccessTokenOnce();
+  if (!fresh) throw new Error('no session');
+  const { data } = await api.get<MeResponse>('/auth/me');
+  useAuth.getState().setSession(fresh, data.user);
+  return data.user;
 }
 
 api.interceptors.response.use(

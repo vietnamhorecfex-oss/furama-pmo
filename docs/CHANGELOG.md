@@ -2,6 +2,45 @@
 
 Per `CLAUDE.md` golden rule #1, every deviation from the spec is recorded here with a reason.
 
+## 2026-07-01 — Phase 5: App Router UI (route tree + feature migration + polling)
+
+Migrated the legacy Vite tab-workspace (`web/legacy/`) into the Next.js App Router. The single-page
+`App.tsx` with a `useState<View>` tab switcher became a real route tree:
+`/projects` (list) → `/projects/[projectId]/layout.tsx` (workspace shell) → 11 sibling sub-routes
+(`dashboard, tasks, board, calendar, budget, gates, activity, team, settings, io, ai`). All 11 feature
+components + their hooks moved nearly verbatim (`git mv` + `'use client'` + import fixes); markup,
+Tailwind, i18n keys, query keys and API paths unchanged. `web/legacy/` deleted.
+
+### Deviations from the legacy UI / spec
+- **Navigation model: tabs → routes.** Tab state (`useState<View>` + `renderView`) replaced by App
+  Router `<Link>` navigation and `usePathname` active-state. The 11 views are now addressable URLs
+  (was the original "route đầy đủ" requirement).
+- **Task drawer: local state → `?task=` search param.** The drawer opened via `openTaskId` state and an
+  `onOpen` callback; it now opens via a `?task=<id>` search param read by `TaskDrawerHost` in the
+  project layout. `onOpen(id)` pushes the param; `onClose` does `router.push(pathname)` to drop it.
+  More faithful to "route đầy đủ" and makes a focused task shareable/deep-linkable.
+- **WebSocket DROPPED, replaced by polling.** `lib/ws.ts` (socket.io client + cache-invalidation
+  patcher) removed; `socket.io-client` is no longer a dependency. The query keys WS used to invalidate
+  (`['tasks',…]`, `['task',…]`, `['comments',…]`) plus dashboard + budget-summary now carry
+  `refetchInterval: POLL_MS` (`POLL_MS = 20_000`, in `query-client.ts`). The notification bell keeps
+  its existing 30s poll. Realtime is now near-real-time (≤20s) — acceptable per the Phase-0 decision
+  ("Polling qua TanStack Query").
+- **Canonical api-client = axios.** The current fetch-based `api<T>()` was replaced by the legacy
+  axios client (`src/lib/api-client.ts`: request-interceptor bearer attach, single-inflight
+  `refreshAccessTokenOnce`, one-retry-on-401). `axios` added to `web` deps. This let all ~13 feature
+  hooks migrate unchanged (they call `api.get/post/patch(url,{params}).data`).
+- **Session-on-reload fixed.** In-memory zustand loses `accessToken`/`user` on hard reload. The project
+  layout + project-list page now call `bootstrapSession()` (in `api-client.ts`) when `user` is null.
+  It **explicitly** `POST /auth/refresh` first (cookie-based, no bearer) to mint a fresh access token,
+  then `GET /auth/me` with that token and `setSession(token, data.user)` (the endpoint returns
+  `{user, memberships}`). The explicit refresh is required because the response interceptor deliberately
+  skips its silent-refresh-on-401 for `/auth/*` URLs (loop guard), so a bare `GET /auth/me` on a cold
+  load would 401 and bounce the user to `/login`. On failure → redirect `/login`. Fixes the known
+  "reload mất session" gap flagged in the Phase-0 projects-page stub. (Caught by the Phase-5 wiring
+  review before merge.)
+- **`useWorkstreams` moved in Task 5.3 (plan scheduled 5.5).** `TasksTable` imports it; moving it with
+  the task views (rather than with the team views) was required to keep the build green.
+
 ## 2026-07-01 — Phase 4: AI assistant engine port
 
 Ported `backend/src/ai/` (assistant tool-use engine, chat/action routes, notifications, knowledge

@@ -1,16 +1,15 @@
 'use client';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-store';
-import { api } from '@/lib/api-client';
+import { bootstrapSession } from '@/lib/api-client';
 import { useI18n, type Lang } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
 import { useProjects } from '@/features/projects/useProjects';
 import { useLogout } from '@/features/auth/useLogin';
 import { NotificationBell } from '@/features/notifications/NotificationBell';
 import { TaskDrawerHost } from '@/features/tasks/TaskDrawerHost';
-import type { MeResponse } from '@furama/shared';
 
 type Tab = { seg: string; key: string; cap?: 'MANAGE_CONFIG' | 'IMPORT_EXPORT' };
 const TABS: Tab[] = [
@@ -44,19 +43,18 @@ export default function ProjectLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { t } = useI18n();
   const user = useAuth((s) => s.user);
-  const setSession = useAuth((s) => s.setSession);
   const projects = useProjects();
   const logout = useLogout();
   const { can } = usePermissions(projectId);
   const [ready, setReady] = useState<boolean>(!!user);
 
-  // Session rehydrate on cold load.
+  // Session rehydrate on cold load: refresh from the cookie, then load the profile.
   useEffect(() => {
     if (user) { setReady(true); return; }
-    api.get<MeResponse>('/auth/me')
-      .then(({ data }) => { setSession(useAuth.getState().accessToken ?? '', data.user); setReady(true); })
+    bootstrapSession()
+      .then(() => setReady(true))
       .catch(() => router.replace('/login'));
-  }, [user, setSession, router]);
+  }, [user, router]);
 
   const labels = t as Record<string, string>;
   const visible = TABS.filter((tab) => !tab.cap || can(tab.cap));
@@ -95,7 +93,9 @@ export default function ProjectLayout({ children }: { children: ReactNode }) {
         </div>
       </header>
       <main className="max-w-7xl mx-auto px-4 py-4">{children}</main>
-      <TaskDrawerHost projectId={projectId} />
+      <Suspense fallback={null}>
+        <TaskDrawerHost />
+      </Suspense>
     </div>
   );
 }

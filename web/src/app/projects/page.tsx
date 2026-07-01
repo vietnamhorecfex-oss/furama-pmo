@@ -5,23 +5,19 @@ import { useI18n } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth-store';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api-client';
-import type { MeResponse } from '@furama/shared';
+import { bootstrapSession } from '@/lib/api-client';
 
 export default function ProjectsPage() {
   const { t } = useI18n();
   const router = useRouter();
   const user = useAuth((s) => s.user);
-  const setSession = useAuth((s) => s.setSession);
   const projects = useProjects();
 
-  // Rehydrate user on a cold load (cookie present, in-memory store empty).
+  // Rehydrate user on a cold load: refresh from the cookie, then load the profile.
   useEffect(() => {
     if (user) return;
-    api.get<MeResponse>('/auth/me')
-      .then(({ data }) => setSession(useAuth.getState().accessToken ?? '', data.user))
-      .catch(() => router.replace('/login'));
-  }, [user, setSession, router]);
+    bootstrapSession().catch(() => router.replace('/login'));
+  }, [user, router]);
 
   return (
     <main className="max-w-4xl mx-auto p-6">

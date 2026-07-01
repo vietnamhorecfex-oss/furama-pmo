@@ -1,6 +1,6 @@
 /**
- * web/server port of backend TasksService — part 1: list/get/myTasks/create + helpers.
- * (backend/src/tasks/tasks.service.ts lines ~66–209, ~412–437)
+ * web/server port of backend TasksService — parts 1 & 2.
+ * (backend/src/tasks/tasks.service.ts lines ~66–209, ~212–472)
  *
  * Mechanical transforms applied:
  *  - NestJS class → module functions
@@ -10,10 +10,19 @@
  *  - this.audit.record → auditRecord from ../audit/audit
  *  - this.realtime.emit → DROPPED (comment: realtime polling in Phase 5)
  *
- * Part 2 (update/progress/delete/assignments/dependencies) is in Task 2.6.
+ * Part 1 (list/get/myTasks/create): Task 2.5
+ * Part 2 (update/progress/delete/assignments/dependencies): Task 2.6
  */
 import type { Prisma, Task, TaskAssignment } from '@prisma/client';
-import type { CreateTaskDto, ListTasksQuery, TaskDto } from '@furama/shared';
+import type {
+  CreateTaskDto,
+  ListTasksQuery,
+  ProgressUpdateDto,
+  SetAssignmentsDto,
+  SetDependenciesDto,
+  TaskDto,
+  UpdateTaskDto,
+} from '@furama/shared';
 import { prisma } from '../prisma';
 import { assertCan } from '../rbac/rbac';
 import type { AuthContext } from '../rbac/rbac';
@@ -21,6 +30,7 @@ import { auditRecord } from '../audit/audit';
 import { BadRequest, Conflict, NotFound } from '../http/errors';
 import { moneyToNumber } from '../http/serialize';
 import type { Paginated } from '../http/serialize';
+import { applyTaskInvariants } from './task-invariants';
 
 const SORTABLE_FIELDS = new Set([
   'code',
@@ -205,6 +215,271 @@ export async function createTask(
   // realtime: was emit('task.created'); polling in Phase 5
 
   return getTask(ctx, created.id);
+}
+
+// ────────────────────────────────────────────────────────── UPDATE / DELETE ───
+
+/**
+ * Port of backend TasksService.update (~line 212).
+ * Fetch task → assertCan EDIT_TASK; date-order check across merged before/after;
+ * applyTaskInvariants → conflict ⇒ BadRequest; BigInt casts; audit task.updated.
+ */
+export async function updateTask(
+  ctx: AuthContext,
+  taskId: string,
+  dto: UpdateTaskDto,
+  ip: string | null,
+): Promise<TaskDto> {
+  const before = await prisma.task.findUnique({ where: { id: taskId } });
+  if (!before) throw new NotFound('Task not found');
+  await assertCan(ctx, 'EDIT_TASK', before.projectId, { taskId });
+
+  // Date-order check across before/after merged values.
+  const start = dto.startDate === undefined ? before.startDate : toDate(dto.startDate);
+  const end = dto.deadline === undefined ? before.deadline : toDate(dto.deadline);
+  if (start && end && start > end) {
+    throw new BadRequest('deadline must be on or after startDate');
+  }
+
+  const inv = applyTaskInvariants({
+    current: { status: before.status, percent: before.percent },
+    next: { status: dto.status, percent: dto.percent },
+  });
+  if (inv.conflict) {
+    throw new BadRequest('status and percent are inconsistent');
+  }
+
+  const data: Prisma.TaskUpdateInput = {
+    updatedBy: { connect: { id: ctx.userId } },
+    ...(dto.title !== undefined ? { title: dto.title } : {}),
+    ...(dto.description !== undefined ? { description: dto.description } : {}),
+    ...(dto.phaseId !== undefined ? { phase: dto.phaseId ? { connect: { id: dto.phaseId } } : { disconnect: true } } : {}),
+    ...(dto.workstreamId !== undefined ? { workstream: dto.workstreamId ? { connect: { id: dto.workstreamId } } : { disconnect: true } } : {}),
+    ...(dto.category !== undefined ? { category: dto.category } : {}),
+    ...(dto.budgetCategoryId !== undefined ? { budgetCategory: dto.budgetCategoryId ? { connect: { id: dto.budgetCategoryId } } : { disconnect: true } } : {}),
+    ...(dto.startDate !== undefined ? { startDate: toDate(dto.startDate) } : {}),
+    ...(dto.deadline !== undefined ? { deadline: toDate(dto.deadline) } : {}),
+    ...(dto.durationDays !== undefined ? { durationDays: dto.durationDays } : {}),
+    ...(dto.priority !== undefined ? { priority: dto.priority } : {}),
+    ...(dto.kpi !== undefined ? { kpi: dto.kpi } : {}),
+    ...(dto.deliverable !== undefined ? { deliverable: dto.deliverable } : {}),
+    ...(dto.dependencyText !== undefined ? { dependencyText: dto.dependencyText } : {}),
+    ...(dto.riskText !== undefined ? { riskText: dto.riskText } : {}),
+    ...(dto.audience !== undefined ? { audience: dto.audience } : {}),
+    ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
+    ...(dto.inChargeLabel !== undefined ? { inChargeLabel: dto.inChargeLabel } : {}),
+    ...(dto.budgetVnd !== undefined ? { budgetVnd: BigInt(dto.budgetVnd) } : {}),
+    ...(dto.actualVnd !== undefined ? { actualVnd: BigInt(dto.actualVnd) } : {}),
+    status: inv.resolved.status,
+    percent: inv.resolved.percent,
+  };
+
+  const after = await prisma.task.update({ where: { id: taskId }, data });
+  await auditRecord(
+    { actorId: ctx.userId, projectId: before.projectId, ip },
+    {
+      action: 'task.updated',
+      entityType: 'Task',
+      entityId: taskId,
+      before: { status: before.status, percent: before.percent },
+      after: { status: after.status, percent: after.percent },
+    },
+  );
+  // realtime: was emit('task.updated'); polling in Phase 5
+
+  return getTask(ctx, taskId);
+}
+
+/**
+ * Port of backend TasksService.updateProgress (~line 274).
+ * MEMBER caller is permitted ONLY if assignee — RbacService resolves both LEAD and MEMBER scopes.
+ */
+export async function updateTaskProgress(
+  ctx: AuthContext,
+  taskId: string,
+  dto: ProgressUpdateDto,
+  ip: string | null,
+): Promise<TaskDto> {
+  const before = await prisma.task.findUnique({ where: { id: taskId } });
+  if (!before) throw new NotFound('Task not found');
+  await assertCan(ctx, 'UPDATE_TASK_PROGRESS', before.projectId, { taskId });
+
+  const inv = applyTaskInvariants({
+    current: { status: before.status, percent: before.percent },
+    next: { status: dto.status, percent: dto.percent },
+  });
+  if (inv.conflict) throw new BadRequest('status and percent are inconsistent');
+
+  const after = await prisma.task.update({
+    where: { id: taskId },
+    data: {
+      status: inv.resolved.status,
+      percent: inv.resolved.percent,
+      ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
+      updatedBy: { connect: { id: ctx.userId } },
+    },
+  });
+  await auditRecord(
+    { actorId: ctx.userId, projectId: before.projectId, ip },
+    {
+      action: 'task.progress',
+      entityType: 'Task',
+      entityId: taskId,
+      before: { status: before.status, percent: before.percent },
+      after: {
+        status: after.status,
+        percent: after.percent,
+        ...(dto.notes !== undefined ? { note: dto.notes } : {}),
+      },
+    },
+  );
+  // realtime: was emit('task.progress'); polling in Phase 5
+
+  return getTask(ctx, taskId);
+}
+
+/**
+ * Port of backend TasksService.delete (~line 324).
+ * Hard delete (assignments/comments/deps cascade via DB FK on delete cascade).
+ * No scope hint — LEAD=false per the capability matrix.
+ */
+export async function deleteTask(
+  ctx: AuthContext,
+  taskId: string,
+  ip: string | null,
+): Promise<void> {
+  const before = await prisma.task.findUnique({ where: { id: taskId } });
+  if (!before) throw new NotFound('Task not found');
+  await assertCan(ctx, 'DELETE_TASK', before.projectId);
+  await prisma.task.delete({ where: { id: taskId } });
+  await auditRecord(
+    { actorId: ctx.userId, projectId: before.projectId, ip },
+    { action: 'task.deleted', entityType: 'Task', entityId: taskId, before: { code: before.code } },
+  );
+  // realtime: was emit('task.deleted'); polling in Phase 5
+}
+
+// ──────────────────────────────────────────── ASSIGNMENTS / DEPENDENCIES ─────
+
+/**
+ * Port of backend TasksService.setAssignments (~line 341).
+ * Replace-all in a transaction: delete all TaskAssignment for task, re-insert from dto.
+ */
+export async function setTaskAssignments(
+  ctx: AuthContext,
+  taskId: string,
+  dto: SetAssignmentsDto,
+  ip: string | null,
+): Promise<TaskDto> {
+  const task = await prisma.task.findUnique({ where: { id: taskId } });
+  if (!task) throw new NotFound('Task not found');
+  await assertCan(ctx, 'EDIT_TASK', task.projectId, { taskId });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.taskAssignment.deleteMany({ where: { taskId } });
+    if (dto.assignments.length > 0) {
+      await tx.taskAssignment.createMany({
+        data: dto.assignments.map((a) => ({
+          taskId,
+          userId: a.userId ?? null,
+          label: a.label,
+          role: a.role,
+        })),
+      });
+    }
+  });
+  await auditRecord(
+    { actorId: ctx.userId, projectId: task.projectId, ip },
+    { action: 'task.assignmentsSet', entityType: 'Task', entityId: taskId },
+  );
+  // realtime: was emit('task.assignmentsSet'); polling in Phase 5
+
+  return getTask(ctx, taskId);
+}
+
+/**
+ * Port of backend TasksService.setDependencies (~line 371).
+ * Dedupe + drop self-reference; all dep IDs must belong to same project; cycle detection via DFS.
+ */
+export async function setTaskDependencies(
+  ctx: AuthContext,
+  taskId: string,
+  dto: SetDependenciesDto,
+  ip: string | null,
+): Promise<TaskDto> {
+  const task = await prisma.task.findUnique({ where: { id: taskId } });
+  if (!task) throw new NotFound('Task not found');
+  await assertCan(ctx, 'EDIT_TASK', task.projectId, { taskId });
+
+  // Dedupe and silently drop self-reference.
+  const deps = Array.from(new Set(dto.dependsOnTaskIds.filter((id) => id !== taskId)));
+
+  if (deps.length > 0) {
+    // All deps must live in the same project (no cross-project leakage).
+    const inProject = await prisma.task.count({
+      where: { id: { in: deps }, projectId: task.projectId },
+    });
+    if (inProject !== deps.length) {
+      throw new BadRequest('All dependencies must belong to the same project');
+    }
+    // Cycle check: DFS over the proposed graph — if taskId is reachable again, reject.
+    if (await wouldCreateCycle(task.projectId, taskId, deps)) {
+      throw new BadRequest('Dependency cycle detected');
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.taskDependency.deleteMany({ where: { taskId } });
+    if (deps.length > 0) {
+      await tx.taskDependency.createMany({
+        data: deps.map((id) => ({ taskId, dependsOnTaskId: id })),
+      });
+    }
+  });
+  await auditRecord(
+    { actorId: ctx.userId, projectId: task.projectId, ip },
+    { action: 'task.dependenciesSet', entityType: 'Task', entityId: taskId, after: { count: deps.length } },
+  );
+  // realtime: was emit('task.dependenciesSet'); polling in Phase 5
+
+  return getTask(ctx, taskId);
+}
+
+/**
+ * Port of backend TasksService.wouldCreateCycle (~line 440).
+ * Load the entire project's TaskDependency graph, build adjacency map with proposed edges,
+ * then DFS from taskId — if taskId is reachable again ⇒ cycle.
+ */
+async function wouldCreateCycle(
+  projectId: string,
+  newTaskId: string,
+  proposedDeps: string[],
+): Promise<boolean> {
+  const edges = await prisma.taskDependency.findMany({
+    where: { task: { projectId } },
+    select: { taskId: true, dependsOnTaskId: true },
+  });
+  const adj = new Map<string, string[]>();
+  for (const e of edges) {
+    if (e.taskId === newTaskId) continue; // we're about to replace this node's edges
+    const list = adj.get(e.taskId) ?? [];
+    list.push(e.dependsOnTaskId);
+    adj.set(e.taskId, list);
+  }
+  adj.set(newTaskId, [...proposedDeps]);
+
+  // DFS from newTaskId following edges; if we ever visit newTaskId again → cycle.
+  const seen = new Set<string>();
+  const stack: string[] = [...proposedDeps];
+  while (stack.length > 0) {
+    const cur = stack.pop()!;
+    if (cur === newTaskId) return true;
+    if (seen.has(cur)) continue;
+    seen.add(cur);
+    const next = adj.get(cur);
+    if (next) stack.push(...next);
+  }
+  return false;
 }
 
 // ─────────────────────────────────────────────────── CODE GENERATION ─────────

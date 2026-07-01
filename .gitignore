@@ -17,3 +17,4 @@ shared/dist/
 node_modules/.prisma/
 playwright-report/
 test-results/
+.playwright-mcp/

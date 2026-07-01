@@ -12,6 +12,7 @@ import { useWorkstreams } from '../team/useWorkstreams';
 import { useI18n } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
 import { scheduleHealth, HEALTH_STYLE, type Health } from '@/lib/schedule';
+import { Spinner } from '@/components/Spinner';
 
 const STATUSES: TaskStatus[] = ['NOT_STARTED', 'IN_PROGRESS', 'IN_REVIEW', 'BLOCKED', 'COMPLETED'];
 const PRIORITIES: Priority[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
@@ -150,7 +151,7 @@ export function TasksTable({ projectId, onOpen }: Props) {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {list.isLoading && (
-              <tr><td colSpan={10} className="px-3 py-6 text-center text-slate-400">{t.loading}</td></tr>
+              <tr><td colSpan={10} className="px-3 py-6"><div className="grid place-items-center"><Spinner /></div></td></tr>
             )}
             {pageRows.map(({ task, health: h, pic: p }) => (
               <tr key={task.id} onClick={() => onOpen(task.id)} className="hover:bg-slate-50 cursor-pointer">

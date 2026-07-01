@@ -10,6 +10,7 @@ import type { ProjectDto, UpdateProjectMetaDto } from '@furama/shared';
 import { api } from '../../lib/api-client';
 import { ConfigLists } from './ConfigLists';
 import { useProjects } from '../projects/useProjects';
+import { Spinner } from '../../components/Spinner';
 
 interface Props { projectId: string }
 
@@ -18,7 +19,7 @@ export function SettingsPage({ projectId }: Props) {
   const project = projects.data?.find((p) => p.id === projectId);
   return (
     <div className="space-y-4">
-      {project ? <MetaBlock project={project} /> : <p className="text-slate-500">Loading project…</p>}
+      {project ? <MetaBlock project={project} /> : <div className="py-6"><Spinner /></div>}
       <ConfigLists projectId={projectId} />
     </div>
   );

@@ -352,7 +352,11 @@ export async function exportProject(ctx: AuthContext, projectId: string): Promis
     workstreams,
     statuses,
     priorities,
-    budgetCategories: budgets.map((b) => ({ ...b, plannedVnd: moneyToNumber(b.plannedVnd) })),
+    budgetCategories: budgets.map((b) => ({
+      ...b,
+      plannedVnd: moneyToNumber(b.plannedVnd),
+      actualVnd: moneyToNumber(b.actualVnd),
+    })),
     members,
     tasks: tasks.map((t) => ({
       ...t,

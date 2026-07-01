@@ -10,6 +10,7 @@ import { api } from '../../lib/api-client';
 import { useMilestones } from '../dashboard/useDashboard';
 import { useI18n } from '../../lib/i18n';
 import { usePermissions } from '../../lib/permissions';
+import { PageLoader } from '../../components/Spinner';
 
 const STATUSES: GateStatus[] = ['PENDING', 'PASSED', 'FAILED', 'NA'];
 const COLOR: Record<GateStatus, string> = {
@@ -41,7 +42,7 @@ export function GatesPanel({ projectId }: Props) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['milestones', projectId] }),
   });
 
-  if (q.isLoading) return <p className="text-slate-500">{t.loading}</p>;
+  if (q.isLoading) return <PageLoader />;
   if (q.isError || !q.data) return <p className="text-red-600">{t.error}</p>;
 
   return (

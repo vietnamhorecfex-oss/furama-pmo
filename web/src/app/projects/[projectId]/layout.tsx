@@ -1,6 +1,5 @@
 'use client';
 import { type ReactNode, Suspense, useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-store';
 import { bootstrapSession } from '@/lib/api-client';
@@ -10,6 +9,8 @@ import { useProjects } from '@/features/projects/useProjects';
 import { useLogout } from '@/features/auth/useLogin';
 import { NotificationBell } from '@/features/notifications/NotificationBell';
 import { TaskDrawerHost } from '@/features/tasks/TaskDrawerHost';
+import { Spinner } from '@/components/Spinner';
+import { ProgressLink } from '@/components/ProgressLink';
 
 type Tab = { seg: string; key: string; cap?: 'MANAGE_CONFIG' | 'IMPORT_EXPORT' };
 const TABS: Tab[] = [
@@ -59,7 +60,7 @@ export default function ProjectLayout({ children }: { children: ReactNode }) {
   const labels = t as Record<string, string>;
   const visible = TABS.filter((tab) => !tab.cap || can(tab.cap));
 
-  if (!ready) return <div className="min-h-screen grid place-items-center text-slate-400">…</div>;
+  if (!ready) return <div className="min-h-screen grid place-items-center"><Spinner className="h-8 w-8" /></div>;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -84,10 +85,10 @@ export default function ProjectLayout({ children }: { children: ReactNode }) {
             const href = `/projects/${projectId}/${tab.seg}`;
             const active = pathname === href;
             return (
-              <Link key={tab.seg} href={href}
+              <ProgressLink key={tab.seg} href={href}
                 className={`px-3 py-1.5 text-sm rounded transition-colors ${active ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>
                 {labels[tab.key]}
-              </Link>
+              </ProgressLink>
             );
           })}
         </div>

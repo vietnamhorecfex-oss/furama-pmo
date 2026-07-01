@@ -13,6 +13,7 @@ import { downloadBudgetCsv, parseBudgetCsv } from './budgetCsv';
 import { formatVnd, formatVndFull } from '../../lib/format';
 import { useI18n } from '../../lib/i18n';
 import { usePermissions } from '../../lib/permissions';
+import { PageLoader } from '../../components/Spinner';
 
 interface Props { projectId: string }
 
@@ -52,7 +53,7 @@ export function BudgetPanel({ projectId }: Props) {
       .sort((x, y) => y.committedVnd - x.committedVnd);
   }, [b, search]);
 
-  if (q.isLoading) return <p className="text-slate-500">{t.loading}</p>;
+  if (q.isLoading) return <PageLoader />;
   if (q.isError || !b) return <p className="text-red-600">{t.error}</p>;
 
   const remaining = b.capVnd - b.committedVnd;

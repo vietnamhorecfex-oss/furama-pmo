@@ -5,6 +5,7 @@
  */
 import { useState } from 'react';
 import { useActivityFeed } from './useActivity';
+import { PageLoader } from '../../components/Spinner';
 
 interface Props { projectId: string }
 
@@ -13,7 +14,7 @@ export function ActivityFeed({ projectId }: Props) {
   const PAGE_SIZE = 20;
   const q = useActivityFeed(projectId, page, PAGE_SIZE);
 
-  if (q.isLoading) return <p className="text-slate-500">Loading activity…</p>;
+  if (q.isLoading) return <PageLoader />;
   if (q.isError) {
     const msg = (q.error as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message;
     return <p className="text-red-600">{msg ?? 'Failed to load activity.'}</p>;

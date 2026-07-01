@@ -6,12 +6,13 @@
 import type { DashboardOverview, ProgressGroup } from '@furama/shared';
 import { useDashboard } from './useDashboard';
 import { formatVnd } from '../../lib/format';
+import { PageLoader } from '../../components/Spinner';
 
 interface Props { projectId: string }
 
 export function DashboardPage({ projectId }: Props) {
   const q = useDashboard(projectId);
-  if (q.isLoading) return <p className="text-slate-500">Loading dashboard…</p>;
+  if (q.isLoading) return <PageLoader />;
   if (q.isError || !q.data) return <p className="text-red-600">Failed to load dashboard.</p>;
   const d = q.data;
 

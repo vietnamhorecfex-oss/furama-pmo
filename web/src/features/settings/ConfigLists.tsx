@@ -9,6 +9,7 @@
  */
 import { useState } from 'react';
 import { useCreateDim, useDeleteDim, useDim, type DimKind, type DimRow } from './useConfig';
+import { Spinner } from '../../components/Spinner';
 
 type Field = { name: string; label: string; type: 'text' | 'number'; placeholder?: string; required?: boolean; default?: string };
 
@@ -151,7 +152,7 @@ function DimSection({
       )}
 
       {list.isLoading ? (
-        <p className="text-sm text-slate-500">Loading…</p>
+        <div className="py-4"><Spinner className="h-5 w-5" /></div>
       ) : (
         <ul className="divide-y divide-slate-100">
           {list.data?.map((row: DimRow) => (

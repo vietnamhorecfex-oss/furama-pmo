@@ -1,8 +1,14 @@
-# 10 — Deployment (Vercel + Neon)
+# 10 — Deployment (Vercel + self-managed PostgreSQL)
 
 The app is a single full-stack **Next.js 14** project in `web/`, backed by **PostgreSQL**.
-Recommended production stack: **Vercel** (hosting + serverless functions) + **Neon** (serverless
-Postgres). This runbook assumes the Phase 0–7 refactor (no NestJS backend, no Docker/Redis).
+Production stack: **Vercel** (hosting + serverless functions) + **your own PostgreSQL** (managed
+service or self-hosted — not Neon). This runbook assumes the Phase 0–7 refactor (no NestJS backend,
+no Docker/Redis).
+
+> **Serverless + Postgres = you need a connection pooler.** Each Vercel function invocation opens its
+> own DB connection; without pooling you will exhaust Postgres `max_connections` under load. Run
+> **PgBouncer** (transaction mode) — or your host's built-in pooler — in front of Postgres, and point
+> `DATABASE_URL` at the pooler. `DIRECT_URL` points at the real Postgres port for migrations.
 
 ## 0. Repository shape (what Vercel builds)
 
@@ -19,15 +25,18 @@ Postgres). This runbook assumes the Phase 0–7 refactor (no NestJS backend, no 
   `buildCommand: prisma generate --schema ../prisma/schema.prisma && next build` — pick whichever your
   Vercel project accepts; the root-config form is the default here.
 
-## 1. Provision Neon
+## 1. Provision PostgreSQL + a pooler
 
-1. Create a Neon project + database (e.g. `furama`).
-2. Copy **two** connection strings from the Neon dashboard:
-   - **Pooled** (host contains `-pooler`) → runtime `DATABASE_URL`. Append
-     `?sslmode=require&pgbouncer=true&connection_limit=1` (serverless-safe: PgBouncer + one connection
-     per function invocation).
-   - **Direct** (no `-pooler`) → `DIRECT_URL`, used only by `prisma migrate`. Append `?sslmode=require`.
-3. The Prisma datasource already declares both (`url` = pooled, `directUrl` = direct).
+1. Create a PostgreSQL database (e.g. `furama`) on your managed service or server. Postgres 16.
+2. Put **PgBouncer** in transaction mode in front of it (many managed hosts — Supabase, Railway,
+   DigitalOcean, RDS+RDS Proxy, etc. — offer a built-in pooler; otherwise run PgBouncer yourself).
+3. You now have **two** endpoints:
+   - **Pooled** (PgBouncer, often port `6432`) → runtime `DATABASE_URL`. Append
+     `?sslmode=require&pgbouncer=true&connection_limit=1`.
+   - **Direct** (Postgres, port `5432`) → `DIRECT_URL`, used only by `prisma migrate` (migrations need a
+     real connection; PgBouncer transaction mode breaks them). Append `?sslmode=require`.
+4. The Prisma datasource already declares both (`url` = pooled, `directUrl` = direct). If you truly
+   cannot run a pooler, point both at `5432` with `?connection_limit=1` and keep traffic low.
 
 ## 2. Apply the schema + seed (once, from your machine)
 
@@ -57,7 +66,7 @@ npm run db:seed            # tsx db/scripts/seed.ts → 628 tasks, idempotent
 ## 4. Serverless notes
 
 - **Connection pooling is mandatory.** Each serverless invocation opens its own Prisma connection;
-  without the Neon pooler + `connection_limit=1` you will exhaust Postgres connections under load.
+  without PgBouncer + `connection_limit=1` you will exhaust Postgres `max_connections` under load.
 - **Prisma client singleton** (`web/src/server/prisma.ts`) reuses one client per warm function instance.
 - **Function duration:** the AI chat route sets `export const maxDuration = 60` (Vercel Hobby cap). If
   you deploy on Hobby, that is the ceiling; Pro allows up to 300 s if you raise it.

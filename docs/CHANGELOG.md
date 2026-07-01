@@ -2,11 +2,15 @@
 
 Per `CLAUDE.md` golden rule #1, every deviation from the spec is recorded here with a reason.
 
-## 2026-07-01 — Phase 7: deploy config (Vercel + Neon) + hardening
+## 2026-07-01 — Phase 7: deploy config (Vercel + self-managed PostgreSQL) + hardening
+
+Target chosen: **Vercel serverless + self-managed PostgreSQL** (not Neon). A connection pooler
+(PgBouncer, transaction mode) in front of Postgres is required for serverless.
 
 - **Serverless DB.** Prisma datasource gained `directUrl = env("DIRECT_URL")` — runtime uses the
-  POOLED Neon connection (`DATABASE_URL`), migrations use the DIRECT one. Local dev sets both equal.
-  `web/src/server/prisma.ts` already uses a singleton client (safe for warm serverless instances).
+  POOLED connection (`DATABASE_URL` → PgBouncer), migrations use the DIRECT Postgres endpoint. Local
+  dev sets both equal. `web/src/server/prisma.ts` already uses a singleton client (safe for warm
+  serverless instances).
 - **Build wiring.** Root `postinstall: prisma generate` guarantees the client exists after any
   `npm install` (local + Vercel). Root `vercel.json` added: `installCommand npm install`,
   `buildCommand npm run build -w @furama/web`, `outputDirectory web/.next`, `framework nextjs`.

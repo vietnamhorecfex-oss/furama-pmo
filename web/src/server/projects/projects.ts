@@ -51,6 +51,9 @@ export async function createProject(
 export async function listProjects(ctx: AuthContext): Promise<ProjectDto[]> {
   const rows = await prisma.project.findMany({
     where: {
+      // Defense-in-depth tenant isolation: scope to the caller's org AND their membership.
+      // A stray cross-org membership row can never leak another tenant's project.
+      orgId: ctx.orgId,
       archivedAt: null,
       members: { some: { userId: ctx.userId } },
     },

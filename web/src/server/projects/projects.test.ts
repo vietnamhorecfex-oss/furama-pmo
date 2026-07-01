@@ -35,6 +35,22 @@ describe('projects', () => {
     const others = await listProjects({ userId: otherUserId, orgId });
     expect(others.find((p) => p.id === pid)).toBeFalsy();
   });
+  it('does NOT leak another org\'s project even with a stray cross-org membership (tenant isolation)', async () => {
+    // Second tenant with its own project.
+    const orgB = await prisma.organization.create({ data: { slug: `pB-${Date.now()}`, name: 'OrgB' } });
+    const projB = await prisma.project.create({
+      data: { orgId: orgB.id, name: 'B-Secret', budgetCapVnd: 0n, createdById: userId },
+    });
+    // Simulate a stray cross-org membership: org-A user is a member of org-B's project.
+    await prisma.projectMember.create({ data: { projectId: projB.id, userId, role: 'VIEWER' } });
+    // listProjects is scoped by the caller's orgId, so org-B's project must NOT appear.
+    const mine = await listProjects(ctx());
+    expect(mine.find((p) => p.id === projB.id)).toBeFalsy();
+    // cleanup
+    await prisma.projectMember.deleteMany({ where: { projectId: projB.id } });
+    await prisma.project.delete({ where: { id: projB.id } });
+    await prisma.organization.delete({ where: { id: orgB.id } });
+  });
   it('denies get for a non-member (Forbidden)', async () => {
     await expect(getProject({ userId: otherUserId, orgId }, pid)).rejects.toThrow(/member|forbidden/i);
   });

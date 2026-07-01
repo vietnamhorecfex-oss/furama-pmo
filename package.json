@@ -10,6 +10,7 @@
     "web"
   ],
   "scripts": {
+    "postinstall": "prisma generate --schema ./prisma/schema.prisma",
     "build": "npm run build --workspaces --if-present",
     "dev": "npm run build -w @furama/shared && concurrently -n shared,web -c blue,magenta \"npm run dev -w @furama/shared\" \"npm run dev -w @furama/web\"",
     "lint": "npm run lint --workspaces --if-present",

@@ -2,6 +2,25 @@
 
 Per `CLAUDE.md` golden rule #1, every deviation from the spec is recorded here with a reason.
 
+## 2026-07-01 — Phase 7: deploy config (Vercel + Neon) + hardening
+
+- **Serverless DB.** Prisma datasource gained `directUrl = env("DIRECT_URL")` — runtime uses the
+  POOLED Neon connection (`DATABASE_URL`), migrations use the DIRECT one. Local dev sets both equal.
+  `web/src/server/prisma.ts` already uses a singleton client (safe for warm serverless instances).
+- **Build wiring.** Root `postinstall: prisma generate` guarantees the client exists after any
+  `npm install` (local + Vercel). Root `vercel.json` added: `installCommand npm install`,
+  `buildCommand npm run build -w @furama/web`, `outputDirectory web/.next`, `framework nextjs`.
+- **`.env.example` rewritten** for Next.js + Neon (added `DIRECT_URL`, `ANTHROPIC_API_KEY`,
+  `AI_MODEL_REASONING`, prod cookie/JWT notes; removed Vite-era `API_PORT`/`WEB_ORIGIN:5173`).
+- **Deploy runbook** added at `docs/10-deployment.md` (Neon provisioning, migrate+seed, Vercel env,
+  serverless notes, smoke checklist).
+- **M7 tenant-isolation fix.** `listProjects` now filters `orgId: ctx.orgId` in addition to membership
+  (defense-in-depth: a stray cross-org membership row can no longer leak another tenant's project).
+  Added a regression test proving a cross-org membership does not surface the other org's project.
+- **Perf debt (accepted, documented).** Dashboard multi-query (budget parallelized via `Promise.all`),
+  sequential packed-seed import, and milestone N×2 hydrate are correctness-complete and run off the
+  hot path; left as-is with notes in `docs/10-deployment.md §6`. No behavior change.
+
 ## 2026-07-01 — Phase 6: parity, backend removal, seed rewrite
 
 Verified full endpoint parity, then deleted the NestJS `backend/` app entirely. The Next.js server

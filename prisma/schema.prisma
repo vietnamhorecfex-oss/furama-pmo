@@ -7,7 +7,11 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  // Runtime queries use the POOLED connection (Neon pooler / PgBouncer) for serverless.
   url      = env("DATABASE_URL")
+  // Migrations & introspection need a DIRECT (non-pooled) connection.
+  // Locally, set DIRECT_URL equal to DATABASE_URL.
+  directUrl = env("DIRECT_URL")
 }
 
 // ----------------------------- Enums -----------------------------

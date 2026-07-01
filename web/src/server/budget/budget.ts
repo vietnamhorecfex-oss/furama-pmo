@@ -94,6 +94,7 @@ export async function budgetSummary(ctx: AuthContext, projectId: string): Promis
   }
 
   const wsNameById = new Map(workstreams.map((w) => [w.id, w.name]));
+  // Note: byWorkstream.actualVnd rolls up task.actualVnd (task-level actuals), unlike byCategory.actualVnd which is the manual BudgetCategory.actualVnd field.
   const byWorkstream = byWorkstreamRows.map((r) => ({
     workstreamId: r.workstreamId,
     name: r.workstreamId ? (wsNameById.get(r.workstreamId) ?? 'Unknown') : 'Unassigned',

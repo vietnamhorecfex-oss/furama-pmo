@@ -117,6 +117,9 @@ describe('budget summary', () => {
   it('a VIEWER can read the summary but a LEAD cannot set the cap', async () => {
     // LEAD role does not have MANAGE_BUDGET capability
     await expect(setBudgetCap(leadCtx, pid, 10, null)).rejects.toThrow(/forbidden|cannot/i);
+    await expect(
+      setCategoryAmounts(leadCtx, pid, brandingId, { plannedVnd: 1 } as any, null),
+    ).rejects.toThrow(/forbidden|cannot/i);
   });
 
   it('all money fields are numbers, not BigInt', async () => {

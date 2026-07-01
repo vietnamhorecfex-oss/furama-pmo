@@ -1,3 +1,4 @@
+'use client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AddMemberDto, MemberDto, UpdateMemberDto } from '@furama/shared';
 import { api } from '../../lib/api-client';

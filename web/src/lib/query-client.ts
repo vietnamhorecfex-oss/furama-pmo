@@ -1,5 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
 
+export const POLL_MS = 20_000;
+
 export function makeQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {

@@ -1,3 +1,4 @@
+'use client';
 /**
  * Client-side mirror of the backend RBAC matrix (capability.enum.ts) for UI gating only.
  * The server is the source of truth and still enforces every write; this just hides/disables

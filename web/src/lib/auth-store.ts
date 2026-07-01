@@ -7,6 +7,7 @@ interface AuthState {
   user: PublicUser | null;
   setSession: (token: string, user: PublicUser) => void;
   setToken: (token: string) => void;
+  setAccessToken: (token: string) => void;
   clear: () => void;
 }
 export const useAuth = create<AuthState>((set) => ({
@@ -14,5 +15,6 @@ export const useAuth = create<AuthState>((set) => ({
   user: null,
   setSession: (accessToken, user) => set({ accessToken, user }),
   setToken: (accessToken) => set({ accessToken }),
+  setAccessToken: (accessToken) => set({ accessToken }),
   clear: () => set({ accessToken: null, user: null }),
 }));

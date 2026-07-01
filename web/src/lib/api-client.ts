@@ -1,34 +1,66 @@
 'use client';
+/**
+ * W-01 — HTTP client with automatic access-token attach + silent refresh on 401.
+ *
+ * Single in-flight refresh: parallel 401s share one /auth/refresh call to avoid a stampede
+ * that would otherwise burn the rate limit (10/min/IP) and trigger family revocation.
+ */
+import axios, { type AxiosError, type AxiosRequestConfig } from 'axios';
 import { useAuth } from './auth-store';
 
-async function refresh(): Promise<string | null> {
-  const res = await fetch('/api/v1/auth/refresh', { method: 'POST' });
-  if (!res.ok) return null;
-  const { accessToken } = (await res.json()) as { accessToken: string };
-  useAuth.getState().setToken(accessToken);
-  return accessToken;
+export const api = axios.create({
+  baseURL: '/api/v1',
+  withCredentials: true, // send the refresh cookie
+});
+
+api.interceptors.request.use((config) => {
+  const token = useAuth.getState().accessToken;
+  if (token) {
+    config.headers = config.headers ?? {};
+    (config.headers as Record<string, string>).Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+let refreshInflight: Promise<string | null> | null = null;
+
+async function refreshAccessTokenOnce(): Promise<string | null> {
+  if (refreshInflight) return refreshInflight;
+  refreshInflight = (async () => {
+    try {
+      const res = await axios.post<{ accessToken: string }>('/api/v1/auth/refresh', undefined, {
+        withCredentials: true,
+      });
+      useAuth.getState().setAccessToken(res.data.accessToken);
+      return res.data.accessToken;
+    } catch {
+      useAuth.getState().clear();
+      return null;
+    } finally {
+      refreshInflight = null;
+    }
+  })();
+  return refreshInflight;
 }
 
-export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const doFetch = (token: string | null) =>
-    fetch(`/api/v1${path}`, {
-      ...init,
-      headers: {
-        'content-type': 'application/json',
-        ...(token ? { authorization: `Bearer ${token}` } : {}),
-        ...(init.headers ?? {}),
-      },
-    });
-
-  let token = useAuth.getState().accessToken;
-  let res = await doFetch(token);
-  if (res.status === 401) {
-    token = await refresh();
-    if (token) res = await doFetch(token);
-  }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: { code: 'INTERNAL', message: res.statusText } }));
-    throw body;
-  }
-  return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
-}
+api.interceptors.response.use(
+  (r) => r,
+  async (error: AxiosError) => {
+    const original = error.config as (AxiosRequestConfig & { _retry?: boolean }) | undefined;
+    if (
+      error.response?.status === 401 &&
+      original &&
+      !original._retry &&
+      !original.url?.includes('/auth/')
+    ) {
+      original._retry = true;
+      const fresh = await refreshAccessTokenOnce();
+      if (fresh) {
+        original.headers = original.headers ?? {};
+        (original.headers as Record<string, string>).Authorization = `Bearer ${fresh}`;
+        return api.request(original);
+      }
+    }
+    return Promise.reject(error);
+  },
+);

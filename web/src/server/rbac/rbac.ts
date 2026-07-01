@@ -64,7 +64,7 @@ export async function can(
 }
 
 /** True if the LEAD owns the given workstream in this project. */
-async function leadOwnsWorkstream(userId: string, projectId: string, workstreamId: string): Promise<boolean> {
+export async function leadOwnsWorkstream(userId: string, projectId: string, workstreamId: string): Promise<boolean> {
   const row = await prisma.memberWorkstream.findFirst({
     where: {
       workstreamId,

@@ -88,6 +88,10 @@ export async function importPackedSeed(
   const seed: PackedSeed = parsed.data;
   const idx = indexer(seed.cols);
 
+  if (!seed.cols.includes('id') && !seed.cols.includes('code')) {
+    throw new BadRequest('Seed is missing a task code column (id or code)');
+  }
+
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) throw new BadRequest('Project not found');
 
@@ -158,10 +162,10 @@ export async function importPackedSeed(
   // ── Row loop ──────────────────────────────────────────────────────────────────
   // PERF (Phase 7): batch this loop; consider maxDuration
   for (const row of seed.rows) {
-    const code = stringOf(safeGet(row, idx, 'code') ?? safeGet(row, idx, 'id'));
+    const code = stringOf(safeGet(row, idx, 'id') ?? safeGet(row, idx, 'code'));
     if (!code) continue;
 
-    const projectKey = stringOf(safeGet(row, idx, 'workstream')) ?? 'PMO';
+    const projectKey = stringOf(safeGet(row, idx, 'project') ?? safeGet(row, idx, 'workstream')) ?? 'PMO';
     const phaseName = stringOf(safeGet(row, idx, 'phase'));
     const title = stringOf(safeGet(row, idx, 'title')) ?? '(untitled)';
     const description = stringOf(safeGet(row, idx, 'description'));

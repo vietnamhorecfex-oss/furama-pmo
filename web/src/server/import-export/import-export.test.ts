@@ -132,6 +132,35 @@ describe('importPackedSeed', () => {
   it('a VIEWER cannot import (Forbidden)', async () => {
     await expect(importPackedSeed(viewerCtx, pid, seed, null)).rejects.toThrow(/forbidden|cannot/i);
   });
+
+  it('resolves the workstream track from the "project" column (real seed format)', async () => {
+    const ts = Date.now();
+    const freshProject = await prisma.project.create({
+      data: { orgId, name: `IEReal-${ts}`, budgetCapVnd: BigInt(0), createdById: ownerUserId },
+    });
+    await prisma.projectMember.create({
+      data: { projectId: freshProject.id, userId: ownerUserId, role: 'OWNER' },
+    });
+
+    const realSeed = {
+      cols: ['id', 'project', 'phase', 'title', 'status'],
+      rows: [['X-0001', 'MKT', 'Marketing', 'Launch', 'NOT_STARTED']],
+    };
+    await importPackedSeed(ownerCtx, freshProject.id, realSeed, null);
+
+    const t = await prisma.task.findFirst({ where: { projectId: freshProject.id, code: 'X-0001' } });
+    expect(t).not.toBeNull();
+    const ws = await prisma.workstream.findFirst({ where: { projectId: freshProject.id, id: t!.workstreamId ?? undefined } });
+    expect(ws?.track).toBe('MARKETING');
+
+    await prisma.project.delete({ where: { id: freshProject.id } });
+  });
+
+  it('rejects a seed missing the task code column with BadRequest', async () => {
+    await expect(
+      importPackedSeed(ownerCtx, pid, { cols: ['title', 'phase'], rows: [['t', 'p']] }, null),
+    ).rejects.toThrow(/code|id|column/i);
+  });
 });
 
 describe('exportProject', () => {

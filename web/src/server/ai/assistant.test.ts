@@ -27,6 +27,8 @@ import type { AuthContext } from '../rbac/rbac';
 let orgId: string;
 let ownerCtx: AuthContext;
 let strangerCtx: AuthContext;
+let leadCtx: AuthContext;
+let leadUserId: string;
 let pid: string;
 let taskId: string;
 
@@ -55,14 +57,20 @@ beforeAll(async () => {
   const stranger = await prisma.user.create({
     data: { orgId, name: 'Stranger', email: `ai-str-${ts}@x.test`, passwordHash: 'x', isActive: true },
   });
+  const lead = await prisma.user.create({
+    data: { orgId, name: 'Lead', email: `ai-lead-${ts}@x.test`, passwordHash: 'x', isActive: true },
+  });
   ownerCtx = { userId: owner.id, orgId };
   strangerCtx = { userId: stranger.id, orgId };
+  leadCtx = { userId: lead.id, orgId };
+  leadUserId = lead.id;
 
   const project = await prisma.project.create({
     data: { orgId, name: `AiProject-${ts}`, budgetCapVnd: BigInt(0), createdById: owner.id },
   });
   pid = project.id;
   await prisma.projectMember.create({ data: { projectId: pid, userId: owner.id, role: 'OWNER' } });
+  await prisma.projectMember.create({ data: { projectId: pid, userId: lead.id, role: 'LEAD' } });
 
   const phase = await prisma.phase.create({ data: { projectId: pid, name: 'Exec', order: 1 } });
   const ws = await prisma.workstream.create({ data: { projectId: pid, name: 'Ops', track: 'OPERATIONS', order: 1 } });
@@ -177,5 +185,42 @@ describe('searchKnowledge', () => {
     expect(hits.length).toBeGreaterThanOrEqual(1);
     expect(hits[0]!.title).toBe('Check-in SOP');
     expect(hits[0]!.excerpt.length).toBeLessThanOrEqual(500);
+  });
+});
+
+describe('send_notification RBAC deny (MANAGE_MEMBERS)', () => {
+  it('LEAD can propose send_notification but confirmAction is denied with 403 and marks action FAILED', async () => {
+    // LEAD has VIEW_PROJECT → can reach chat() and get a PROPOSED action
+    const client = scriptedClient([
+      {
+        stop_reason: 'tool_use',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tu-notif',
+            name: 'send_notification',
+            input: { userId: leadUserId, title: 'x', body: 'y' },
+          },
+        ],
+      },
+      { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Staged notification — please confirm.' }] },
+    ]);
+
+    const res = await chat(leadCtx, pid, 'send a notification', undefined, { client });
+    expect(res.proposedActions).toHaveLength(1);
+    const actionId = res.proposedActions[0]!.actionId;
+
+    // Confirm as LEAD — MANAGE_MEMBERS check inside dispatchWriteTool → send_notification must throw 403
+    await expect(confirmAction(leadCtx, actionId)).rejects.toMatchObject({ status: 403 });
+
+    // Action row must be marked FAILED
+    const action = await prisma.aiActionLog.findUnique({ where: { id: actionId } });
+    expect(action!.status).toBe('FAILED');
+
+    // No Notification row created for this lead user as a result
+    const notifCount = await prisma.notification.count({
+      where: { projectId: pid, userId: leadUserId, title: 'x' },
+    });
+    expect(notifCount).toBe(0);
   });
 });

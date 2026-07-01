@@ -2,6 +2,13 @@
 
 Per `CLAUDE.md` golden rule #1, every deviation from the spec is recorded here with a reason.
 
+## 2026-07-01 — Phase 4: AI assistant engine port
+
+### Deviations from the design spec / backend
+- **AI assistant port (Phase 4):** `create_config_item`/workstream track default changed from `'EXE'`
+  (backend bug — not a valid `WorkstreamTrack` enum value, would throw at Prisma runtime) to
+  `'OPERATIONS'`.
+
 ## 2026-07-01 — Phase 3: analytics & IO port (budget, dashboard, milestones, import-export)
 
 Ported the computation/IO modules into Next.js (`web/src/server/**` + route handlers), same

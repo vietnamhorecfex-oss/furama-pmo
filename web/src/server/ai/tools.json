@@ -44,7 +44,7 @@
     },
     {
       "name": "list_overdue",
-      "description": "List tasks past their deadline and not completed.",
+      "description": "List tasks past their deadline and not completed. Returns { total, tasks } — total is the full overdue count; tasks holds up to 50 items sorted by priority then deadline.",
       "write": false, "capability": "task.read",
       "input_schema": { "type": "object", "properties": { "workstreamId": { "type": "string" } }, "additionalProperties": false }
     },

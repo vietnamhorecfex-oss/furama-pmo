@@ -2,6 +2,26 @@
 
 Per `CLAUDE.md` golden rule #1, every deviation from the spec is recorded here with a reason.
 
+## 2026-07-02 — Gemini fix: disable thinking so answers aren't truncated
+
+Live testing with a real `GEMINI_API_KEY` showed `/ai/reminders` returning markdown cut off
+mid-sentence: Gemini 2.5 counts *thinking* tokens against `maxOutputTokens`, while our callers
+size `max_tokens` (512–1024) for visible text only (Anthropic semantics). Fix in
+`web/src/server/ai/gemini.ts`: `generationConfig.thinkingConfig.thinkingBudget` defaults to `0`
+(thinking off); `GEMINI_THINKING_BUDGET` overrides it (number = budget, non-number such as
+`auto` = keep the model default). Documented in `.env.example`; 3 new adapter tests.
+
+Same session, two adjacent findings from live browser testing:
+
+- **`list_overdue` paging bug.** The chat tool fetched page 1 of `listTasks` (50 rows by
+  `createdAt`) and filtered overdue in memory — in the 628-task seed project it reported 2
+  overdue instead of 20. Now queries the DB directly (`deadline < now`, not COMPLETED,
+  optional workstream) and returns `{ total, tasks }` (top 50 by priority/deadline, with PIC)
+  so the model can state the true count. Integration test reproduces the >50-tasks case.
+- **Reminder digest sizing.** `max_tokens` 1024 → 2048 and the reminder prompt now asks for
+  ~8 highlights per group with repeated items rolled up, so the answer fits the budget
+  instead of enumerating all 60 attention items and truncating.
+
 ## 2026-07-02 — AI digest (reminders + recap) + Gemini provider option
 
 Additions beyond the original spec (M8 AI assistant), requested by the owner:

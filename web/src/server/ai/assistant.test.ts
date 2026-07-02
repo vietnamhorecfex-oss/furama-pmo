@@ -179,6 +179,64 @@ describe('confirm / reject', () => {
   });
 });
 
+describe('list_overdue', () => {
+  it('finds overdue tasks even when they fall outside the first 50 by creation order', async () => {
+    // Fresh project: 55 future-deadline tasks created FIRST, 5 overdue created LAST —
+    // a page-1-of-50 slice by createdAt would contain zero overdue tasks.
+    const ts = Date.now();
+    const project = await prisma.project.create({
+      data: { orgId, name: `AiOverdue-${ts}`, budgetCapVnd: BigInt(0), createdById: ownerCtx.userId },
+    });
+    await prisma.projectMember.create({
+      data: { projectId: project.id, userId: ownerCtx.userId, role: 'OWNER' },
+    });
+    const phase = await prisma.phase.create({ data: { projectId: project.id, name: 'P', order: 1 } });
+    const ws = await prisma.workstream.create({
+      data: { projectId: project.id, name: 'W', track: 'OPERATIONS', order: 1 },
+    });
+    const future = new Date(Date.now() + 30 * 86_400_000);
+    const past = new Date(Date.now() - 2 * 86_400_000);
+    const base = Date.now() - 3_600_000;
+    await prisma.task.createMany({
+      data: Array.from({ length: 55 }, (_, i) => ({
+        projectId: project.id, phaseId: phase.id, workstreamId: ws.id,
+        code: `OV-F-${i}`, title: `Future ${i}`, status: 'NOT_STARTED' as const, percent: 0,
+        deadline: future, createdAt: new Date(base + i * 1000),
+      })),
+    });
+    await prisma.task.createMany({
+      data: Array.from({ length: 5 }, (_, i) => ({
+        projectId: project.id, phaseId: phase.id, workstreamId: ws.id,
+        code: `OV-P-${i}`, title: `Overdue ${i}`, status: 'NOT_STARTED' as const, percent: 0,
+        deadline: past, createdAt: new Date(base + (100 + i) * 1000),
+      })),
+    });
+
+    const captured: any[] = [];
+    const steps = [
+      { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'tu-ov', name: 'list_overdue', input: {} }] },
+      { stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] },
+    ];
+    let i = 0;
+    const client: AnthropicLike = {
+      messages: {
+        create: async (params) => {
+          captured.push(params);
+          return steps[Math.min(i++, steps.length - 1)] as any;
+        },
+      },
+    };
+    await chat(ownerCtx, project.id, 'what is overdue?', undefined, { client });
+
+    // The second model call carries the tool_result the model saw.
+    const toolResultMsg = captured[1].messages.at(-1);
+    const payload = JSON.parse(toolResultMsg.content[0].content);
+    expect(payload.total).toBe(5);
+    const codes = payload.tasks.map((t: { code: string }) => t.code).sort();
+    expect(codes).toEqual(['OV-P-0', 'OV-P-1', 'OV-P-2', 'OV-P-3', 'OV-P-4']);
+  });
+});
+
 describe('searchKnowledge', () => {
   it('returns matching excerpts and respects topK', async () => {
     const hits = await searchKnowledge(ownerCtx, pid, 'greeting', 4);

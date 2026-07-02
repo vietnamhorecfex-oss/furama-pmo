@@ -3,7 +3,7 @@
  * Covers request conversion (system, tool round-trip, schema sanitizing),
  * response conversion (text / functionCall → stop_reason), and HTTP errors.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import type Anthropic from '@anthropic-ai/sdk';
 import { createGeminiClient, toGeminiRequest, sanitizeSchema, toAnthropicMessage } from './gemini';
 
@@ -27,6 +27,27 @@ describe('toGeminiRequest', () => {
     expect(req.systemInstruction?.parts[0]?.text).toBe('You are a helper.');
     expect(req.contents).toEqual([{ role: 'user', parts: [{ text: 'hello' }] }]);
     expect(req.generationConfig?.maxOutputTokens).toBe(512);
+  });
+
+  it('disables thinking by default so max_tokens is spent on visible text', () => {
+    const req = toGeminiRequest(BASE_PARAMS);
+    expect(req.generationConfig?.thinkingConfig).toEqual({ thinkingBudget: 0 });
+  });
+
+  describe('GEMINI_THINKING_BUDGET override', () => {
+    afterEach(() => vi.unstubAllEnvs());
+
+    it('uses the env value when set', () => {
+      vi.stubEnv('GEMINI_THINKING_BUDGET', '2048');
+      const req = toGeminiRequest(BASE_PARAMS);
+      expect(req.generationConfig?.thinkingConfig).toEqual({ thinkingBudget: 2048 });
+    });
+
+    it('omits thinkingConfig for non-numeric values (model default applies)', () => {
+      vi.stubEnv('GEMINI_THINKING_BUDGET', 'auto');
+      const req = toGeminiRequest(BASE_PARAMS);
+      expect(req.generationConfig?.thinkingConfig).toBeUndefined();
+    });
   });
 
   it('round-trips tool_use → functionCall and tool_result → functionResponse (name via id)', () => {

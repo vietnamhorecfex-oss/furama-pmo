@@ -393,16 +393,38 @@ async function dispatchReadTool(
       }
 
       case 'list_overdue': {
-        const result = await listTasks(ctx, projectId, {
-          workstreamId: input.workstreamId as string | undefined,
-          page: 1,
-          pageSize: 50,
-          order: 'asc',
-        });
-        const now = new Date();
-        return result.data.filter(
-          (t) => t.deadline && new Date(t.deadline) < now && t.status !== 'COMPLETED',
-        );
+        // Filter in the DB, not on one page of listTasks — overdue tasks can sit
+        // anywhere in a 600+ task project. chat() already asserted VIEW_PROJECT.
+        const where: Prisma.TaskWhereInput = {
+          projectId,
+          deadline: { lt: new Date() },
+          NOT: { status: 'COMPLETED' },
+          ...(input.workstreamId ? { workstreamId: input.workstreamId as string } : {}),
+        };
+        const [total, rows] = await prisma.$transaction([
+          prisma.task.count({ where }),
+          prisma.task.findMany({
+            where,
+            orderBy: [{ priority: 'asc' }, { deadline: 'asc' }],
+            take: 50,
+            select: {
+              code: true, title: true, deadline: true, priority: true, status: true, percent: true,
+              assignments: { where: { role: 'IN_CHARGE' }, select: { label: true }, take: 1 },
+            },
+          }),
+        ]);
+        return {
+          total,
+          tasks: rows.map((r) => ({
+            code: r.code,
+            title: r.title,
+            deadline: r.deadline,
+            priority: r.priority,
+            status: r.status,
+            percent: r.percent,
+            pic: r.assignments[0]?.label ?? null,
+          })),
+        };
       }
 
       case 'search_knowledge': {

@@ -34,7 +34,7 @@ interface GeminiRequest {
   contents: GeminiContent[];
   systemInstruction?: { parts: { text: string }[] };
   tools?: { functionDeclarations: { name: string; description?: string; parameters?: unknown }[] }[];
-  generationConfig?: { maxOutputTokens?: number };
+  generationConfig?: { maxOutputTokens?: number; thinkingConfig?: { thinkingBudget: number } };
 }
 
 interface GeminiResponse {
@@ -131,7 +131,17 @@ export function toGeminiRequest(params: Anthropic.MessageCreateParamsNonStreamin
     });
   if (decls.length) req.tools = [{ functionDeclarations: decls }];
 
-  if (params.max_tokens) req.generationConfig = { maxOutputTokens: params.max_tokens };
+  // Gemini 2.5 counts thinking tokens against maxOutputTokens, while callers size
+  // max_tokens for visible text only (Anthropic semantics) — so thinking is disabled
+  // by default or the answer gets truncated mid-sentence. GEMINI_THINKING_BUDGET
+  // overrides: a number sets the budget; any non-number leaves the model default.
+  const rawBudget = process.env.GEMINI_THINKING_BUDGET ?? '0';
+  const thinkingBudget = /^\d+$/.test(rawBudget) ? Number(rawBudget) : null;
+  req.generationConfig = {
+    ...(params.max_tokens ? { maxOutputTokens: params.max_tokens } : {}),
+    ...(thinkingBudget !== null ? { thinkingConfig: { thinkingBudget } } : {}),
+  };
+  if (Object.keys(req.generationConfig).length === 0) delete req.generationConfig;
 
   return req;
 }

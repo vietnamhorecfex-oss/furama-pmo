@@ -19,6 +19,8 @@ const envSchema = z
     RATE_LIMIT_READ_PER_MIN: z.coerce.number().int().positive().default(600),
     ANTHROPIC_API_KEY: z.string().optional(),
     AI_MODEL_REASONING: z.string().default('claude-haiku-4-5-20251001'),
+    GEMINI_API_KEY: z.string().optional(),
+    GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
   })
   .strip();
 

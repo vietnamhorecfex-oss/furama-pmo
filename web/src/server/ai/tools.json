@@ -151,7 +151,20 @@
         "properties": {
           "kind": { "type": "string", "enum": ["phase","workstream","status","priority","budgetCategory"] },
           "name": { "type": "string", "maxLength": 120 },
-          "extra": { "type": "object", "description": "kind-specific: e.g. {track}, {color}, {plannedVnd, ownerLabel}, {startDate,endDate}" }
+          "extra": {
+            "type": "object",
+            "description": "kind-specific optional fields",
+            "properties": {
+              "track": { "type": "string", "enum": ["PMO","MARKETING","OPERATIONS"], "description": "workstream only" },
+              "color": { "type": "string", "description": "status/priority only" },
+              "plannedVnd": { "type": "integer", "minimum": 0, "description": "budgetCategory only" },
+              "ownerLabel": { "type": "string", "description": "budgetCategory only" },
+              "startDate": { "type": "string", "format": "date", "description": "phase only" },
+              "endDate": { "type": "string", "format": "date", "description": "phase only" },
+              "order": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          }
         },
         "required": ["kind","name"], "additionalProperties": false
       }

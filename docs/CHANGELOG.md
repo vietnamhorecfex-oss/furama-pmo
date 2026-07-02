@@ -2,6 +2,31 @@
 
 Per `CLAUDE.md` golden rule #1, every deviation from the spec is recorded here with a reason.
 
+## 2026-07-02 — AI digest (reminders + recap) + Gemini provider option
+
+Additions beyond the original spec (M8 AI assistant), requested by the owner:
+
+- **AI digest.** `web/src/server/ai/digest.ts` — `taskReminders` (overdue / due-≤3-days /
+  blocked buckets) and `projectSummary` (executive recap over `dashboardOverview`). Read-only,
+  `VIEW_PROJECT`-gated, exposed at `GET /projects/:pid/ai/reminders|summary`, rendered by
+  `DigestPanel` above the chat on the AI tab. Both degrade to a deterministic Vietnamese
+  markdown fallback when no AI key is configured (`generatedByAI: false`), so the feature
+  works without any LLM. 5 tests (buckets, exclusions, LLM path via injected client, RBAC deny).
+- **Gemini as an alternative LLM provider.** `web/src/server/ai/gemini.ts` implements the
+  existing `AnthropicLike` seam over Gemini REST `generateContent` (system→systemInstruction,
+  `tool_use`⇄`functionCall`, `tool_result`→`functionResponse`, function schemas sanitized to
+  Gemini's OpenAPI subset — Gemini rejects empty-object schemas, so no-arg tools omit
+  `parameters`). Provider selection in `getAiClient()`: `GEMINI_API_KEY` (model from
+  `GEMINI_MODEL`, default `gemini-2.5-flash`) → `ANTHROPIC_API_KEY` → null (rule-based
+  fallback). The assistant tool-use loop is unchanged. `create_config_item.extra` in
+  `tools.json` now declares its kind-specific properties explicitly (required for Gemini,
+  clearer for Claude too). Adapter is fetch-injectable; 7 offline unit tests.
+- **Seed content translated to Vietnamese** (same day, committed separately): human-readable
+  columns of `db/seed/tasks.seed.json` (title/description/deliverable/kpi/category/risk/
+  audience/phase → milestones). Codes, dates, acronyms, brands, and role labels kept verbatim;
+  original English seed preserved at `db/seed/tasks.seed.en.json`; one-off
+  `db/scripts/reseed-vi.ts` wipes and re-imports a project then regenerates milestones.
+
 ## 2026-07-01 — Phase 7: deploy config (Vercel + self-managed PostgreSQL) + hardening
 
 Target chosen: **Vercel serverless + self-managed PostgreSQL** (not Neon). A connection pooler

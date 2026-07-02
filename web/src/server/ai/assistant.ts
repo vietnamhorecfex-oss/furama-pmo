@@ -28,6 +28,7 @@ import { createWorkstream } from '../config/workstreams';
 import { createBudgetCategory } from '../config/categories';
 
 import toolsJson from './tools.json';
+import { getGeminiClient } from './gemini';
 
 const TOOLS: Anthropic.Tool[] = toolsJson.tools.map((t) => ({
   name: t.name,
@@ -61,10 +62,19 @@ export interface AnthropicLike {
   };
 }
 
-export function getAnthropicClient(): AnthropicLike | null {
+/**
+ * Resolve the LLM client: GEMINI_API_KEY (Gemini adapter) takes priority, then
+ * ANTHROPIC_API_KEY (native SDK). Null → callers degrade to their rule-based path.
+ */
+export function getAiClient(): AnthropicLike | null {
+  const gemini = getGeminiClient();
+  if (gemini) return gemini;
   const key = process.env.ANTHROPIC_API_KEY;
   return key ? new Anthropic({ apiKey: key }) : null;
 }
+
+/** @deprecated use getAiClient — kept for older imports. */
+export const getAnthropicClient = getAiClient;
 
 // ======================================================================= CHAT
 
@@ -77,11 +87,11 @@ export async function chat(
 ): Promise<ChatResponse> {
   await assertCan(ctx, 'VIEW_PROJECT', projectId);
 
-  const anthropic = deps?.client !== undefined ? deps.client : getAnthropicClient();
+  const anthropic = deps?.client !== undefined ? deps.client : getAiClient();
 
   if (!anthropic) {
     return {
-      reply: 'AI assistant is not configured (ANTHROPIC_API_KEY missing).',
+      reply: 'AI assistant is not configured (set GEMINI_API_KEY or ANTHROPIC_API_KEY).',
       proposedActions: [],
       conversationId: conversationId ?? '',
     };

@@ -18,3 +18,4 @@ node_modules/.prisma/
 playwright-report/
 test-results/
 .playwright-mcp/
+.claude/settings.local.json

@@ -103,14 +103,14 @@ export function KanbanBoard({ projectId, onOpen }: Props) {
                     }`}
                   >
                     <div className="flex items-start justify-between gap-1 mb-1">
-                      <span className="font-mono text-[10px] text-slate-400">{task.code}</span>
-                      <span className={`text-[10px] uppercase font-semibold px-1 rounded ${PRIORITY_BADGE[task.priority] ?? ''}`}>
+                      <span className="font-mono text-xs text-slate-400">{task.code}</span>
+                      <span className={`text-xs uppercase font-semibold px-1 rounded ${PRIORITY_BADGE[task.priority] ?? ''}`}>
                         {task.priority}
                       </span>
                     </div>
                     <p className="text-sm text-slate-800 line-clamp-2 leading-snug">{task.title}</p>
                     {task.deadline && (
-                      <p className={`text-[10px] mt-1 ${
+                      <p className={`text-xs mt-1 ${
                         new Date(task.deadline) < new Date() && task.status !== 'COMPLETED'
                           ? 'text-red-600 font-semibold'
                           : 'text-slate-400'
@@ -128,7 +128,7 @@ export function KanbanBoard({ projectId, onOpen }: Props) {
                           style={{ width: `${task.percent}%` }}
                         />
                       </div>
-                      <span className="text-[10px] text-slate-400 w-6 text-right">{task.percent}%</span>
+                      <span className="text-xs text-slate-400 w-8 text-right tabular-nums">{task.percent}%</span>
                     </div>
                   </article>
                 ))}

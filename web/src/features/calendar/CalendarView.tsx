@@ -4,7 +4,7 @@
  * Color-coded by status. Click task chip to open drawer.
  * Loads all tasks with deadlines in a 6-week window around the displayed month.
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { TaskDto, TaskStatus } from '@furama/shared';
 import { useAllTasks } from '../tasks/useTasks';
 import { useI18n } from '../../lib/i18n';
@@ -70,6 +70,13 @@ export function CalendarView({ projectId, onOpen }: Props) {
 
   const selectedTasks = selectedDate ? (tasksByDate.get(selectedDate) ?? []) : [];
 
+  // Below lg the day panel sits under the grid — bring it into view on selection.
+  useEffect(() => {
+    if (!selectedDate) return;
+    if (window.matchMedia('(min-width: 1024px)').matches) return;
+    document.getElementById('calendar-day-panel')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [selectedDate]);
+
   function prevMonth() {
     if (month === 0) { setYear((y) => y - 1); setMonth(11); }
     else setMonth((m) => m - 1);
@@ -111,9 +118,9 @@ export function CalendarView({ projectId, onOpen }: Props) {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex items-center gap-3">
-          <h2 className="text-lg font-bold text-slate-800">{t.calendarTitle}</h2>
+          <h2 className="text-lg font-bold text-slate-800 whitespace-nowrap">{t.calendarTitle}</h2>
           <button
             type="button"
             onClick={() => { setYear(today.getFullYear()); setMonth(today.getMonth()); setSelectedDate(todayStr); }}
@@ -123,19 +130,19 @@ export function CalendarView({ projectId, onOpen }: Props) {
           </button>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={prevMonth} className="p-1.5 rounded hover:bg-slate-100">
+          <button type="button" onClick={prevMonth} className="p-2 sm:p-1.5 rounded hover:bg-slate-100" aria-label="←">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
           </button>
-          <span className="font-semibold text-slate-700 min-w-[140px] text-center">
+          <span className="font-semibold text-slate-700 min-w-[120px] sm:min-w-[140px] text-center whitespace-nowrap">
             {MONTH_NAMES[month]} {year}
           </span>
-          <button type="button" onClick={nextMonth} className="p-1.5 rounded hover:bg-slate-100">
+          <button type="button" onClick={nextMonth} className="p-2 sm:p-1.5 rounded hover:bg-slate-100" aria-label="→">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
           </button>
         </div>
         <div className="flex items-center gap-3 text-xs text-slate-500">
           {totalThisMonth > 0 && (
-            <span>{totalThisMonth} task deadline tháng này</span>
+            <span className="hidden md:inline">{totalThisMonth} task deadline tháng này</span>
           )}
           {list.isFetching && <span className="text-indigo-500 animate-pulse">↻</span>}
         </div>
@@ -155,7 +162,7 @@ export function CalendarView({ projectId, onOpen }: Props) {
           <div className="grid grid-cols-7">
             {cells.map((cell, idx) => {
               if (!cell.date) {
-                return <div key={`empty-${idx}`} className="min-h-[80px] bg-slate-50/50 border-b border-r border-slate-100" />;
+                return <div key={`empty-${idx}`} className="min-h-[56px] sm:min-h-[80px] bg-slate-50/50 border-b border-r border-slate-100" />;
               }
               const dayTasks = tasksByDate.get(cell.date) ?? [];
               const isToday = cell.date === todayStr;
@@ -166,7 +173,7 @@ export function CalendarView({ projectId, onOpen }: Props) {
                 <div
                   key={cell.date}
                   onClick={() => setSelectedDate(cell.date === selectedDate ? null : cell.date)}
-                  className={`min-h-[80px] border-b border-r border-slate-100 p-1 cursor-pointer transition-colors ${
+                  className={`min-h-[56px] sm:min-h-[80px] border-b border-r border-slate-100 p-0.5 sm:p-1 cursor-pointer transition-colors ${
                     isSelected ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-400' :
                     isToday ? 'bg-amber-50' : 'hover:bg-slate-50'
                   }`}
@@ -176,19 +183,28 @@ export function CalendarView({ projectId, onOpen }: Props) {
                   }`}>
                     {cell.day}
                   </div>
-                  <div className="space-y-0.5">
+                  {/* Mobile: cells are too narrow for labels — show status dots, tap the day for the list. */}
+                  <div className="flex flex-wrap items-center gap-0.5 px-0.5 sm:hidden">
+                    {dayTasks.slice(0, 4).map((task) => (
+                      <span key={task.id} className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[task.status]}`} />
+                    ))}
+                    {dayTasks.length > 4 && (
+                      <span className="text-[11px] leading-none text-slate-500">+{dayTasks.length - 4}</span>
+                    )}
+                  </div>
+                  <div className="hidden sm:block space-y-0.5">
                     {dayTasks.slice(0, 3).map((task) => (
                       <div
                         key={task.id}
                         onClick={(e) => { e.stopPropagation(); onOpen(task.id); }}
                         title={task.title}
-                        className={`flex items-center gap-1 px-1 py-0.5 rounded text-[10px] font-medium truncate cursor-pointer hover:opacity-80 ${STATUS_CHIP[task.status]}`}
+                        className={`flex items-center gap-1 px-1 py-0.5 rounded text-xs font-medium truncate cursor-pointer hover:opacity-80 ${STATUS_CHIP[task.status]}`}
                       >
                         <span className="truncate">{task.code || task.title}</span>
                       </div>
                     ))}
                     {overflow && (
-                      <div className="text-[10px] text-slate-400 pl-1">+{dayTasks.length - 3} more</div>
+                      <div className="text-xs text-slate-400 pl-1">+{dayTasks.length - 3} more</div>
                     )}
                   </div>
                 </div>
@@ -217,7 +233,7 @@ export function CalendarView({ projectId, onOpen }: Props) {
 
           {/* Selected day tasks */}
           {selectedDate && (
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div id="calendar-day-panel" className="bg-white rounded-xl border border-slate-200 overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-100 bg-indigo-50">
                 <p className="text-sm font-semibold text-indigo-800">
                   {new Date(selectedDate + 'T00:00:00').toLocaleDateString(lang === 'vi' ? 'vi-VN' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' })}
@@ -240,7 +256,7 @@ export function CalendarView({ projectId, onOpen }: Props) {
                           <p className="text-xs font-mono text-slate-400">{task.code}</p>
                           <p className="text-sm text-slate-800 line-clamp-2">{task.title}</p>
                         </div>
-                        <span className={`mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold flex-shrink-0 ${STATUS_CHIP[task.status]}`}>
+                        <span className={`mt-0.5 px-1.5 py-0.5 rounded text-xs font-semibold flex-shrink-0 ${STATUS_CHIP[task.status]}`}>
                           {task.percent}%
                         </span>
                       </div>

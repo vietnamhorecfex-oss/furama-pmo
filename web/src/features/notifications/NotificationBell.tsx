@@ -70,22 +70,23 @@ export function NotificationBell({ projectId }: { projectId: string }) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="relative p-1.5 rounded-lg hover:bg-slate-100 text-slate-600"
+        className="relative p-2 sm:p-1.5 rounded-lg hover:bg-slate-100 text-slate-600"
         title={t.notifications}
+        aria-label={t.notifications}
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
             d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
         </svg>
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-0.5">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center px-0.5">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl border border-slate-200 shadow-xl z-50 overflow-hidden">
+        <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-80 bg-white rounded-xl border border-slate-200 shadow-xl z-50 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
             <span className="font-semibold text-sm text-slate-800">{t.notifications}</span>
             {unreadCount > 0 && (
@@ -111,7 +112,7 @@ export function NotificationBell({ projectId }: { projectId: string }) {
                   className={`w-full text-left px-4 py-3 border-b border-slate-50 hover:bg-slate-50 transition-colors ${!n.readAt ? 'bg-indigo-50/40' : ''}`}
                 >
                   <div className="flex items-start gap-2">
-                    <span className={`mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold ${SEVERITY_COLOR[n.severity]}`}>
+                    <span className={`mt-0.5 px-1.5 py-0.5 rounded text-xs font-semibold ${SEVERITY_COLOR[n.severity]}`}>
                       {n.severity}
                     </span>
                     <div className="flex-1 min-w-0">
@@ -119,7 +120,7 @@ export function NotificationBell({ projectId }: { projectId: string }) {
                         {n.title}
                       </p>
                       <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{n.body}</p>
-                      <p className="text-[10px] text-slate-400 mt-1">
+                      <p className="text-xs text-slate-400 mt-1">
                         {new Date(n.createdAt).toLocaleString()}
                       </p>
                     </div>

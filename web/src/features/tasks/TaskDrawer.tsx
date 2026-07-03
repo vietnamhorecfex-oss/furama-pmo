@@ -165,7 +165,7 @@ function TaskBudgetEditor({ task, canEdit, i18n }: { task: TaskDto; canEdit: boo
       ) : (
         <p className="text-sm text-slate-700">{i18n.budgetAllocated}: <span className="font-semibold">{formatVnd(task.budgetVnd)}</span></p>
       )}
-      <p className="text-[11px] text-slate-400 mt-1.5">↳ {i18n.rollupHint}</p>
+      <p className="text-xs text-slate-400 mt-1.5">↳ {i18n.rollupHint}</p>
       {update.isError && <ErrMsg error={update.error} fallback={i18n.error} />}
     </section>
   );
@@ -199,7 +199,7 @@ function ProgressEditor({ task, i18n }: { task: TaskDto; i18n: ReturnType<typeof
     <section className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
       <h3 className="text-sm font-semibold text-slate-700 mb-3">{i18n.updateProgress}</h3>
       <form onSubmit={submit} className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="block">
             <span className="text-xs uppercase text-slate-500 tracking-wide">{i18n.statusLabel}</span>
             <select
@@ -303,11 +303,11 @@ function HistoryItem({ entry, i18n }: { entry: AuditLogDto; i18n: ReturnType<typ
       <div className="mt-1 space-y-1">
         {statusChanged && (
           <p className="text-sm flex items-center gap-1.5">
-            <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${STATUS_BADGE[before.status as TaskStatus] ?? 'bg-slate-100'}`}>
+            <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${STATUS_BADGE[before.status as TaskStatus] ?? 'bg-slate-100'}`}>
               {statusLabel(before.status as TaskStatus, i18n)}
             </span>
             <span className="text-slate-400">→</span>
-            <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${STATUS_BADGE[after.status as TaskStatus] ?? 'bg-slate-100'}`}>
+            <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${STATUS_BADGE[after.status as TaskStatus] ?? 'bg-slate-100'}`}>
               {statusLabel(after.status as TaskStatus, i18n)}
             </span>
           </p>
@@ -321,7 +321,7 @@ function HistoryItem({ entry, i18n }: { entry: AuditLogDto; i18n: ReturnType<typ
         )}
         {note && (
           <p className="text-sm text-slate-700 bg-amber-50 border border-amber-100 rounded px-2 py-1">
-            <span className="text-[11px] uppercase text-amber-700 font-semibold mr-1">{i18n.note}:</span>
+            <span className="text-xs uppercase text-amber-700 font-semibold mr-1">{i18n.note}:</span>
             <span className="whitespace-pre-wrap">{note}</span>
           </p>
         )}
@@ -334,7 +334,7 @@ function TaskFacts({ t, i18n }: { t: TaskDto; i18n: ReturnType<typeof useI18n>['
   return (
     <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
       <DT label={i18n.statusLabel}>
-        <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${STATUS_BADGE[t.status] ?? ''}`}>
+        <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${STATUS_BADGE[t.status] ?? ''}`}>
           {statusLabel(t.status, i18n)}
         </span>
       </DT>

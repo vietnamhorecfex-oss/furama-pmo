@@ -94,7 +94,7 @@ export function TasksTable({ projectId, onOpen }: Props) {
           value={q}
           onChange={(e) => onFilter(setQ)(e.target.value)}
           placeholder={t.searchTasks}
-          className="flex-1 min-w-[180px] rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+          className="w-full sm:w-auto sm:flex-1 min-w-0 sm:min-w-[180px] rounded-md border border-slate-300 px-3 py-1.5 text-sm"
         />
         <select value={status} onChange={(e) => onFilter(setStatus)(e.target.value as TaskStatus | '')} className={selectCls}>
           <option value="">{t.allStatuses}</option>
@@ -137,16 +137,16 @@ export function TasksTable({ projectId, onOpen }: Props) {
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide">
             <tr>
-              <Th>{t.colCode}</Th>
+              <Th className="hidden md:table-cell">{t.colCode}</Th>
               <Th>{t.colTitle}</Th>
-              <Th>{t.colDept}</Th>
-              <Th>{t.colPic}</Th>
-              <Th>{t.colStart}</Th>
-              <Th>{t.colDeadline}</Th>
-              <Th>{t.colPriority}</Th>
+              <Th className="hidden md:table-cell">{t.colDept}</Th>
+              <Th className="hidden md:table-cell">{t.colPic}</Th>
+              <Th className="hidden md:table-cell">{t.colStart}</Th>
+              <Th className="hidden md:table-cell">{t.colDeadline}</Th>
+              <Th className="hidden md:table-cell">{t.colPriority}</Th>
               <Th>{t.colStatus}</Th>
-              <Th className="text-right">{t.colPercent}</Th>
-              <Th>{t.colHealth}</Th>
+              <Th className="hidden md:table-cell text-right">{t.colPercent}</Th>
+              <Th className="hidden md:table-cell">{t.colHealth}</Th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -155,13 +155,16 @@ export function TasksTable({ projectId, onOpen }: Props) {
             )}
             {pageRows.map(({ task, health: h, pic: p }) => (
               <tr key={task.id} onClick={() => onOpen(task.id)} className="hover:bg-slate-50 cursor-pointer">
-                <td className="px-3 py-2 font-mono text-xs text-slate-500 whitespace-nowrap">{task.code}</td>
-                <td className="px-3 py-2 max-w-[280px] truncate">{task.title}</td>
-                <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{task.workstreamId ? (wsName.get(task.workstreamId) ?? '—') : '—'}</td>
-                <td className="px-3 py-2 text-slate-600 max-w-[140px] truncate">{p || '—'}</td>
-                <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{fmtDate(task.startDate)}</td>
-                <td className={`px-3 py-2 whitespace-nowrap ${h === 'OVERDUE' ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>{fmtDate(task.deadline)}</td>
-                <td className="px-3 py-2"><span className={priorityClass(task.priority)}>{task.priority}</span></td>
+                <td className="hidden md:table-cell px-3 py-2 font-mono text-xs text-slate-500 whitespace-nowrap">{task.code}</td>
+                <td className="px-3 py-2 max-w-[45vw] md:max-w-[280px] truncate">
+                  <span className="md:hidden block font-mono text-xs text-slate-400">{task.code}</span>
+                  {task.title}
+                </td>
+                <td className="hidden md:table-cell px-3 py-2 text-slate-600 whitespace-nowrap">{task.workstreamId ? (wsName.get(task.workstreamId) ?? '—') : '—'}</td>
+                <td className="hidden md:table-cell px-3 py-2 text-slate-600 max-w-[140px] truncate">{p || '—'}</td>
+                <td className="hidden md:table-cell px-3 py-2 text-slate-500 whitespace-nowrap">{fmtDate(task.startDate)}</td>
+                <td className={`hidden md:table-cell px-3 py-2 whitespace-nowrap ${h === 'OVERDUE' ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>{fmtDate(task.deadline)}</td>
+                <td className="hidden md:table-cell px-3 py-2"><span className={priorityClass(task.priority)}>{task.priority}</span></td>
                 <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                   {canEditProgress ? (
                     <select
@@ -176,8 +179,8 @@ export function TasksTable({ projectId, onOpen }: Props) {
                     <span className="text-xs text-slate-600">{task.status.replace('_', ' ')}</span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums">{task.percent}%</td>
-                <td className="px-3 py-2">
+                <td className="hidden md:table-cell px-3 py-2 text-right tabular-nums">{task.percent}%</td>
+                <td className="hidden md:table-cell px-3 py-2">
                   <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${HEALTH_STYLE[h].chip}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${HEALTH_STYLE[h].dot}`} />
                     {HEALTH_LABEL[h]}
@@ -192,7 +195,7 @@ export function TasksTable({ projectId, onOpen }: Props) {
         </table>
       </div>
 
-      <div className="p-3 flex items-center justify-between text-sm border-t border-slate-200">
+      <div className="p-3 flex flex-wrap items-center justify-between gap-2 text-sm border-t border-slate-200">
         <span className="text-slate-500">
           {rows.length} {t.tasksCount} · {t.page} {safePage}/{totalPages}
           {(q || status || priority || dept || health) && (

@@ -11,6 +11,7 @@ interface Props {
   /** Extra className applied to the inline spinner shown while navigating. */
   spinnerClassName?: string;
   onClick?: (e: MouseEvent<HTMLAnchorElement>) => void;
+  'aria-current'?: 'page';
 }
 
 /**
@@ -21,7 +22,7 @@ interface Props {
  * Modifier clicks (⌘/ctrl/shift/middle) fall through to the browser's default
  * new-tab behaviour instead of an in-app navigation.
  */
-export function ProgressLink({ href, children, className, spinnerClassName = 'h-3.5 w-3.5', onClick }: Props) {
+export function ProgressLink({ href, children, className, spinnerClassName = 'h-3.5 w-3.5', onClick, 'aria-current': ariaCurrent }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -34,7 +35,7 @@ export function ProgressLink({ href, children, className, spinnerClassName = 'h-
   }
 
   return (
-    <Link href={href} onClick={handleClick} className={className} aria-busy={isPending || undefined}>
+    <Link href={href} onClick={handleClick} className={className} aria-busy={isPending || undefined} aria-current={ariaCurrent}>
       {children}
       {isPending && <Spinner className={`inline-block ml-1.5 align-[-0.15em] ${spinnerClassName}`} />}
     </Link>

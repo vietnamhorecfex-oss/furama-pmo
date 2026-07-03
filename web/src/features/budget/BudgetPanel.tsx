@@ -140,7 +140,7 @@ export function BudgetPanel({ projectId }: Props) {
               style={{ width: `${Math.min(100, actualPct)}%` }}
             />
           </div>
-          <div className="flex gap-4 mt-1.5 text-[11px] text-slate-500">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs text-slate-500">
             <Legend color="bg-indigo-500" label={`${t.committed} ${formatVnd(b.committedVnd)}`} />
             <Legend color="bg-emerald-600" label={`${t.actual} ${formatVnd(b.actualVnd)}`} />
           </div>

@@ -25,8 +25,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen grid place-items-center">
-      <form onSubmit={onSubmit} className="w-80 space-y-3 rounded-xl border border-slate-200 bg-white p-6">
+    <div className="min-h-screen grid place-items-center px-4">
+      <form onSubmit={onSubmit} className="w-full max-w-xs space-y-3 rounded-xl border border-slate-200 bg-white p-6">
         <h1 className="text-lg font-bold text-indigo-700">Furama PMO</h1>
         <input className="w-full rounded border px-2 py-1.5" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
         <div className="relative">

@@ -79,7 +79,7 @@ export function MemberFormModal({ mode, initial, workstreams, pending, error, on
           />
         </label>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="block">
             <span className="text-xs uppercase text-slate-500 tracking-wide">{t.roleLabel}</span>
             <select

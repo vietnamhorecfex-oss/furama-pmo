@@ -119,6 +119,12 @@ describe('members', () => {
     ).rejects.toThrow(/already a member|conflict/i);
   });
 
+  it('rejects a userId that does not exist with NotFound', async () => {
+    await expect(
+      addMember(ownerCtx, pid, { userId: 'does-not-exist-cuid', role: 'VIEWER' } as any, null),
+    ).rejects.toThrow(/user not found/i);
+  });
+
   it('rejects a duplicate memberLabel with Conflict', async () => {
     // Add a member first with a label
     const m = await addMember(ownerCtx, pid, { userId: u2, role: 'VIEWER', memberLabel: 'UniqueLabel' } as any, null);

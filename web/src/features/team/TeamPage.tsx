@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react';
 import type { MemberDto, MemberRole } from '@furama/shared';
 import { useMembers, useAddMember, useUpdateMember, useRemoveMember } from './useMembers';
 import { useWorkstreams } from './useWorkstreams';
+import { useUsers } from './useUsers';
 import { useAllTasks } from '../tasks/useTasks';
 import { useDashboard } from '../dashboard/useDashboard';
 import { useAuth } from '../../lib/auth-store';
@@ -26,6 +27,7 @@ export function TeamPage({ projectId }: Props) {
   const { t } = useI18n();
   const members = useMembers(projectId);
   const workstreams = useWorkstreams(projectId);
+  const users = useUsers();
   const tasks = useAllTasks(projectId, { sort: 'code', order: 'asc' });
   const dashboard = useDashboard(projectId);
   const meId = useAuth((s) => s.user?.id);
@@ -42,6 +44,12 @@ export function TeamPage({ projectId }: Props) {
     () => new Map((workstreams.data ?? []).map((w) => [w.id, w.name])),
     [workstreams.data],
   );
+
+  // Users eligible to be added = org users not already a member of this project.
+  const availableUsers = useMemo(() => {
+    const taken = new Set((members.data ?? []).map((m) => m.userId));
+    return (users.data ?? []).filter((u) => !taken.has(u.id));
+  }, [users.data, members.data]);
 
   // label → number of tasks assigned to that label (any role).
   const taskCountByLabel = useMemo(() => {
@@ -117,6 +125,7 @@ export function TeamPage({ projectId }: Props) {
       {modal?.mode === 'add' && (
         <MemberFormModal
           mode="add"
+          users={availableUsers}
           workstreams={workstreams.data ?? []}
           pending={add.isPending}
           error={add.error}

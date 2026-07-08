@@ -35,3 +35,12 @@ export const memberDtoSchema = z.object({
   workstreamIds: z.array(z.string()),
 });
 export type MemberDto = z.infer<typeof memberDtoSchema>;
+
+/** Lightweight user record for pickers (e.g. the add-member dropdown). */
+export const userLiteSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string(),
+  avatarColor: z.string(),
+});
+export type UserLite = z.infer<typeof userLiteSchema>;

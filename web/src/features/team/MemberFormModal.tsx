@@ -5,7 +5,7 @@
  * Workstream Lead — the workstream scope. Server enforces the last-OWNER guard + RBAC.
  */
 import { useState } from 'react';
-import type { MemberDto, MemberRole } from '@furama/shared';
+import type { MemberDto, MemberRole, UserLite } from '@furama/shared';
 import { useI18n } from '../../lib/i18n';
 import type { WorkstreamLite } from './useWorkstreams';
 
@@ -29,6 +29,8 @@ export interface MemberFormValue {
 interface Props {
   mode: 'add' | 'edit';
   initial?: MemberDto;
+  /** Selectable users (add mode) — org users not already members. */
+  users?: UserLite[];
   workstreams: WorkstreamLite[];
   pending: boolean;
   error?: unknown;
@@ -36,7 +38,7 @@ interface Props {
   onClose: () => void;
 }
 
-export function MemberFormModal({ mode, initial, workstreams, pending, error, onSubmit, onClose }: Props) {
+export function MemberFormModal({ mode, initial, users = [], workstreams, pending, error, onSubmit, onClose }: Props) {
   const { t } = useI18n();
   const [userId, setUserId] = useState(initial?.userId ?? '');
   const [role, setRole] = useState<MemberRole>(initial?.role ?? 'MEMBER');
@@ -70,13 +72,31 @@ export function MemberFormModal({ mode, initial, workstreams, pending, error, on
 
         <label className="block">
           <span className="text-xs uppercase text-slate-500 tracking-wide">{t.userIdLabel}</span>
-          <input
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            disabled={mode === 'edit'}
-            placeholder="cuid…"
-            className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm font-mono disabled:bg-slate-100 disabled:text-slate-400"
-          />
+          {mode === 'add' ? (
+            <select
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm bg-white"
+            >
+              <option value="" disabled>
+                {t.selectUser}
+              </option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name} ({u.email})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              value={initial?.userId ?? userId}
+              disabled
+              className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm font-mono disabled:bg-slate-100 disabled:text-slate-400"
+            />
+          )}
+          {mode === 'add' && users.length === 0 && (
+            <span className="mt-1 block text-xs text-slate-400">{t.noAvailableUsers}</span>
+          )}
         </label>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

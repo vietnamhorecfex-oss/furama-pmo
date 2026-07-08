@@ -40,6 +40,14 @@ export async function addMember(
 ): Promise<MemberDto> {
   await assertCan(ctx, 'MANAGE_MEMBERS', projectId);
 
+  // The userId must reference a real user in the caller's org — otherwise Prisma throws
+  // an opaque P2003 foreign-key error (ProjectMember_userId_fkey). Fail fast with a clean 404.
+  const user = await prisma.user.findFirst({
+    where: { id: dto.userId, orgId: ctx.orgId },
+    select: { id: true },
+  });
+  if (!user) throw new NotFound('User not found');
+
   // Reject duplicates upfront with a clean error (Prisma would throw P2002 otherwise).
   const existing = await prisma.projectMember.findFirst({
     where: { projectId, userId: dto.userId },

@@ -6,15 +6,23 @@
  */
 import { useMemo, useState } from 'react';
 import type { MemberDto, MemberRole } from '@furama/shared';
-import { useMembers, useAddMember, useUpdateMember, useRemoveMember } from './useMembers';
+import type { CreateMemberUserResult } from '@furama/shared';
+import {
+  useMembers,
+  useAddMember,
+  useUpdateMember,
+  useRemoveMember,
+  useCreateMemberUser,
+} from './useMembers';
 import { useWorkstreams } from './useWorkstreams';
 import { useUsers } from './useUsers';
+import { CredentialsModal } from './CredentialsModal';
 import { useAllTasks } from '../tasks/useTasks';
 import { useDashboard } from '../dashboard/useDashboard';
 import { useAuth } from '../../lib/auth-store';
 import { useI18n } from '../../lib/i18n';
 import { usePermissions } from '../../lib/permissions';
-import { MemberFormModal, ROLE_DISPLAY, type MemberFormValue } from './MemberFormModal';
+import { MemberFormModal, ROLE_DISPLAY, type MemberFormValue, type NewUserFormValue } from './MemberFormModal';
 
 interface Props { projectId: string }
 
@@ -35,10 +43,12 @@ export function TeamPage({ projectId }: Props) {
   const canManage = can('MANAGE_MEMBERS');
 
   const add = useAddMember(projectId);
+  const createUser = useCreateMemberUser(projectId);
   const update = useUpdateMember(projectId);
   const remove = useRemoveMember(projectId);
 
   const [modal, setModal] = useState<{ mode: 'add' } | { mode: 'edit'; member: MemberDto } | null>(null);
+  const [credentials, setCredentials] = useState<CreateMemberUserResult | null>(null);
 
   const wsName = useMemo(
     () => new Map((workstreams.data ?? []).map((w) => [w.id, w.name])),
@@ -127,16 +137,31 @@ export function TeamPage({ projectId }: Props) {
           mode="add"
           users={availableUsers}
           workstreams={workstreams.data ?? []}
-          pending={add.isPending}
-          error={add.error}
+          pending={add.isPending || createUser.isPending}
+          error={add.error || createUser.error}
           onSubmit={(v: MemberFormValue) =>
             add.mutate(
               { userId: v.userId, role: v.role, memberLabel: v.memberLabel, workstreamIds: v.workstreamIds },
               { onSuccess: () => setModal(null) },
             )
           }
+          onCreateUser={(v: NewUserFormValue) =>
+            createUser.mutate(
+              { name: v.name, email: v.email, role: v.role, memberLabel: v.memberLabel, workstreamIds: v.workstreamIds },
+              {
+                onSuccess: (res) => {
+                  setModal(null);
+                  setCredentials(res);
+                },
+              },
+            )
+          }
           onClose={() => setModal(null)}
         />
+      )}
+
+      {credentials && (
+        <CredentialsModal result={credentials} onClose={() => setCredentials(null)} />
       )}
       {modal?.mode === 'edit' && (
         <MemberFormModal

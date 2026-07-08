@@ -13,11 +13,19 @@
  * Workstream scope: only meaningful when role=LEAD; other roles have scope cleared automatically.
  */
 import type { Prisma, MemberRole } from '@prisma/client';
-import type { AddMemberDto, MemberDto, UpdateMemberDto } from '@furama/shared';
+import type {
+  AddMemberDto,
+  MemberDto,
+  UpdateMemberDto,
+  CreateMemberUserDto,
+  CreateMemberUserResult,
+} from '@furama/shared';
 import { prisma } from '../prisma';
 import { assertCan } from '../rbac/rbac';
 import type { AuthContext } from '../rbac/rbac';
 import { auditRecord } from '../audit/audit';
+import { hashPassword } from '../auth/passwords';
+import { generatePassword } from '../auth/generate-password';
 import { BadRequest, NotFound, Conflict } from '../http/errors';
 
 // ─── public API ───────────────────────────────────────────────────────────────
@@ -84,6 +92,77 @@ export async function addMember(
   );
 
   return getOne(created.id);
+}
+
+export async function createUserAndAddMember(
+  ctx: AuthContext,
+  projectId: string,
+  dto: CreateMemberUserDto,
+  ip: string | null,
+): Promise<CreateMemberUserResult> {
+  await assertCan(ctx, 'MANAGE_MEMBERS', projectId);
+
+  const email = dto.email.toLowerCase();
+  // Email is unique per org — reject upfront with a clean error.
+  const clash = await prisma.user.findFirst({
+    where: { orgId: ctx.orgId, email },
+    select: { id: true },
+  });
+  if (clash) throw new Conflict('A user with this email already exists');
+
+  if (dto.memberLabel) {
+    await assertLabelFree(projectId, dto.memberLabel);
+  }
+
+  // System-generated initial password — returned once, never stored in plain text.
+  const tempPassword = generatePassword();
+  const passwordHash = await hashPassword(tempPassword);
+
+  const { user, member } = await prisma.$transaction(async (tx) => {
+    const createdUser = await tx.user.create({
+      data: { orgId: ctx.orgId, name: dto.name, email, passwordHash, isActive: true },
+    });
+    const createdMember = await tx.projectMember.create({
+      data: {
+        projectId,
+        userId: createdUser.id,
+        role: dto.role,
+        memberLabel: dto.memberLabel ?? null,
+      },
+    });
+    await applyScope(tx, createdMember.id, projectId, dto.role, dto.workstreamIds);
+    return { user: createdUser, member: createdMember };
+  });
+
+  await auditRecord(
+    { actorId: ctx.userId, projectId, ip },
+    {
+      action: 'user.created',
+      entityType: 'User',
+      entityId: user.id,
+      after: { email: user.email, name: user.name },
+    },
+  );
+  await auditRecord(
+    { actorId: ctx.userId, projectId, ip },
+    {
+      action: 'member.added',
+      entityType: 'ProjectMember',
+      entityId: member.id,
+      after: { userId: member.userId, role: member.role },
+    },
+  );
+
+  return {
+    member: await getOne(member.id),
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      avatarColor: user.avatarColor,
+    },
+    tempPassword,
+  };
 }
 
 export async function updateMember(

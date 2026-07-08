@@ -1,6 +1,12 @@
 'use client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AddMemberDto, MemberDto, UpdateMemberDto } from '@furama/shared';
+import type {
+  AddMemberDto,
+  MemberDto,
+  UpdateMemberDto,
+  CreateMemberUserDto,
+  CreateMemberUserResult,
+} from '@furama/shared';
 import { api } from '../../lib/api-client';
 
 export function useMembers(projectId: string | undefined) {
@@ -22,6 +28,23 @@ export function useAddMember(projectId: string) {
       return data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['members', projectId] }),
+  });
+}
+
+export function useCreateMemberUser(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (dto: CreateMemberUserDto): Promise<CreateMemberUserResult> => {
+      const { data } = await api.post<CreateMemberUserResult>(
+        `/projects/${projectId}/members/create-user`,
+        dto,
+      );
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['members', projectId] });
+      qc.invalidateQueries({ queryKey: ['users'] });
+    },
   });
 }
 

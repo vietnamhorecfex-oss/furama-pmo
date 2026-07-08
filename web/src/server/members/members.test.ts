@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '../prisma';
-import { listMembers, addMember, updateMember, removeMember } from './members';
+import { listMembers, addMember, updateMember, removeMember, createUserAndAddMember } from './members';
 import type { AuthContext } from '../rbac/rbac';
 
 let orgId: string;
@@ -123,6 +123,41 @@ describe('members', () => {
     await expect(
       addMember(ownerCtx, pid, { userId: 'does-not-exist-cuid', role: 'VIEWER' } as any, null),
     ).rejects.toThrow(/user not found/i);
+  });
+
+  it('createUserAndAddMember creates a user (auto id + password) and adds them as a member', async () => {
+    const ts = Date.now();
+    const res = await createUserAndAddMember(
+      ownerCtx,
+      pid,
+      { name: 'Fresh User', email: `fresh-${ts}@x.test`, role: 'MEMBER' } as any,
+      null,
+    );
+    expect(res.user.id).toBeTruthy(); // auto-generated cuid
+    expect(res.tempPassword).toHaveLength(14);
+    expect(res.member.userId).toBe(res.user.id);
+    expect(res.member.role).toBe('MEMBER');
+
+    // The user really exists and is in the caller's org.
+    const dbUser = await prisma.user.findUnique({ where: { id: res.user.id } });
+    expect(dbUser?.orgId).toBe(orgId);
+    expect(dbUser?.email).toBe(`fresh-${ts}@x.test`);
+
+    await prisma.projectMember.delete({ where: { id: res.member.id } });
+    await prisma.user.delete({ where: { id: res.user.id } });
+  });
+
+  it('createUserAndAddMember rejects a duplicate email with Conflict', async () => {
+    // u2 already exists in this org — reuse its email.
+    const u2Row = await prisma.user.findUnique({ where: { id: u2 } });
+    await expect(
+      createUserAndAddMember(
+        ownerCtx,
+        pid,
+        { name: 'Dup', email: u2Row!.email, role: 'VIEWER' } as any,
+        null,
+      ),
+    ).rejects.toThrow(/already exists|conflict/i);
   });
 
   it('rejects a duplicate memberLabel with Conflict', async () => {

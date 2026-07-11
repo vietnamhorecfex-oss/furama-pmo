@@ -84,6 +84,12 @@ export const progressUpdateSchema = z
     status: taskStatusSchema.optional(),
     percent: percentSchema.optional(),
     notes: notesSchema,
+    /**
+     * True when the change comes from a Kanban drag or the status dropdown (status is the
+     * user's intent and percent is derived to fit). Lets a card move to NOT_STARTED or reopen
+     * from COMPLETED without the status/percent invariants bouncing it back.
+     */
+    kanbanMove: z.boolean().optional(),
   })
   .strict()
   .refine((v) => v.status !== undefined || v.percent !== undefined || v.notes !== undefined, {

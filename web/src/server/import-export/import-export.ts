@@ -29,6 +29,7 @@ import type { AuthContext } from '../rbac/rbac';
 import { auditRecord } from '../audit/audit';
 import { moneyToNumber } from '../http/serialize';
 import { BadRequest } from '../http/errors';
+import { applyTaskInvariants } from '../tasks/task-invariants';
 
 // ─── public type (matches backend ImportResult interface exactly) ──────────────
 
@@ -153,11 +154,21 @@ export async function importPackedSeed(
     categoryIdByName.set(name, cat.id);
   }
   result.budgetCategoriesCreated = rankedCats.length;
-  await prisma.project.update({
-    where: { id: projectId },
-    data: { budgetCapVnd: totalBudgetVnd },
-  });
-  result.budgetCapVnd = Number(totalBudgetVnd);
+  // Only overwrite the project cap when the import actually carries budget data. A task-only
+  // file (no budget column, or all zeros) must NOT silently zero a configured cap.
+  if (totalBudgetVnd > 0n) {
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { budgetCapVnd: totalBudgetVnd },
+    });
+    result.budgetCapVnd = Number(totalBudgetVnd);
+  } else {
+    const proj = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { budgetCapVnd: true },
+    });
+    result.budgetCapVnd = Number(proj?.budgetCapVnd ?? 0n);
+  }
 
   // ── Row loop ──────────────────────────────────────────────────────────────────
   // PERF (Phase 7): batch this loop; consider maxDuration
@@ -216,10 +227,20 @@ export async function importPackedSeed(
       }
     }
 
-    const status = mapStatus(statusRaw, unknownStatusSet);
+    const rawStatus = mapStatus(statusRaw, unknownStatusSet);
     const priority = mapPriority(prioRaw, unknownPrioSet);
-    const finalPercent = status === 'COMPLETED' ? 100 : percent;
+    // Reconcile status/percent through the same invariants the API enforces — so a row like
+    // {percent:100, status:"in progress"} lands as COMPLETED/100, not the impossible IN_PROGRESS/100.
+    const inv = applyTaskInvariants({
+      current: { status: rawStatus, percent },
+      next: { status: rawStatus, percent },
+    });
+    const status = inv.resolved.status;
+    const finalPercent = inv.resolved.percent;
 
+    // `data` is the shared field set for update; create additionally stamps createdById.
+    // On UPDATE we must NOT rewrite createdById — that would clobber the original author with
+    // whoever re-ran the import.
     const data = {
       projectId,
       code,
@@ -245,7 +266,6 @@ export async function importPackedSeed(
       notes: notes ?? null,
       inChargeLabel: inCharge ?? null,
       updatedById: ctx.userId,
-      createdById: ctx.userId,
     };
 
     const existing = await prisma.task.findFirst({
@@ -259,7 +279,7 @@ export async function importPackedSeed(
       taskId = existing.id;
       result.updated++;
     } else {
-      const created = await prisma.task.create({ data });
+      const created = await prisma.task.create({ data: { ...data, createdById: ctx.userId } });
       taskId = created.id;
       result.inserted++;
     }
@@ -337,7 +357,11 @@ export async function exportProject(ctx: AuthContext, projectId: string): Promis
       prisma.statusDef.findMany({ where: { projectId } }),
       prisma.priorityDef.findMany({ where: { projectId } }),
       prisma.budgetCategory.findMany({ where: { projectId } }),
-      prisma.projectMember.findMany({ where: { projectId } }),
+      prisma.projectMember.findMany({
+        where: { projectId },
+        // Explicit projection — never spread whole member/user rows into an export payload.
+        select: { id: true, userId: true, role: true, memberLabel: true, createdAt: true },
+      }),
       prisma.task.findMany({
         where: { projectId },
         include: { assignments: true, dependencies: true },
@@ -345,6 +369,11 @@ export async function exportProject(ctx: AuthContext, projectId: string): Promis
     ]);
 
   if (!project) throw new BadRequest('Project not found');
+
+  await auditRecord(
+    { actorId: ctx.userId, projectId, ip: null },
+    { action: 'export.project', entityType: 'Project', entityId: projectId, after: { tasks: tasks.length } },
+  );
 
   return {
     project: { ...project, budgetCapVnd: moneyToNumber(project.budgetCapVnd) },
@@ -374,6 +403,11 @@ export async function exportTasksCsv(ctx: AuthContext, projectId: string): Promi
     include: { assignments: true, phase: true, workstream: true },
     orderBy: { code: 'asc' },
   });
+
+  await auditRecord(
+    { actorId: ctx.userId, projectId, ip: null },
+    { action: 'export.tasksCsv', entityType: 'Project', entityId: projectId, after: { tasks: tasks.length } },
+  );
 
   const header = [
     'code', 'title', 'phase', 'workstream', 'status', 'priority', 'percent',
@@ -488,6 +522,9 @@ function trackOrder(track: WorkstreamTrack): number {
 }
 
 function csv(s: string): string {
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
+  // Neutralise spreadsheet formula injection: a cell starting with = + - @ (or tab/CR) is
+  // executed as a formula by Excel/Sheets. Prefix with a single quote so it stays literal text.
+  const guarded = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  if (/[",\n]/.test(guarded)) return `"${guarded.replace(/"/g, '""')}"`;
+  return guarded;
 }

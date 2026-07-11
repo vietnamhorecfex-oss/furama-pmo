@@ -4,6 +4,11 @@ import { getAuthContext } from '@/server/auth/session';
 import { clientIp, readJson } from '@/server/http/request';
 import { importPackedSeed } from '@/server/import-export/import-export';
 
+// The canonical 628-row seed runs thousands of sequential queries; give it headroom over the
+// serverless default so a large import doesn't time out mid-way into a partial state.
+export const maxDuration = 300;
+export const dynamic = 'force-dynamic';
+
 export const POST = route(async (req, ctx) => {
   const auth = getAuthContext(req);
   const { projectId } = await ctx.params;

@@ -44,6 +44,42 @@ const SORTABLE_FIELDS = new Set([
   'percent',
 ]);
 
+/**
+ * Guard that any provided phase / workstream / budget-category FK belongs to `projectId`.
+ * Prisma `connect`/scalar FKs only require the row to exist, so without this a caller could
+ * attach a task to ANOTHER project's phase/workstream/category — corrupting that project's
+ * budget rollups and phase/workstream references. Throws BadRequest on a mismatch (was a raw
+ * P2025/P2003 → 500). Only truthy ids are checked; null/undefined (disconnect / unchanged) skip.
+ */
+async function assertRefsInProject(
+  projectId: string,
+  refs: { phaseId?: string | null; workstreamId?: string | null; budgetCategoryId?: string | null },
+): Promise<void> {
+  const checks: Array<Promise<void>> = [];
+  if (refs.phaseId) {
+    checks.push(
+      prisma.phase.count({ where: { id: refs.phaseId, projectId } }).then((n) => {
+        if (n === 0) throw new BadRequest('phaseId does not belong to this project');
+      }),
+    );
+  }
+  if (refs.workstreamId) {
+    checks.push(
+      prisma.workstream.count({ where: { id: refs.workstreamId, projectId } }).then((n) => {
+        if (n === 0) throw new BadRequest('workstreamId does not belong to this project');
+      }),
+    );
+  }
+  if (refs.budgetCategoryId) {
+    checks.push(
+      prisma.budgetCategory.count({ where: { id: refs.budgetCategoryId, projectId } }).then((n) => {
+        if (n === 0) throw new BadRequest('budgetCategoryId does not belong to this project');
+      }),
+    );
+  }
+  await Promise.all(checks);
+}
+
 // ────────────────────────────────────────────────────────────────── READ ──────
 
 export async function listTasks(
@@ -143,6 +179,12 @@ export async function createTask(
     workstreamId: dto.workstreamId ?? null,
   });
 
+  await assertRefsInProject(projectId, {
+    phaseId: dto.phaseId,
+    workstreamId: dto.workstreamId,
+    budgetCategoryId: dto.budgetCategoryId,
+  });
+
   if (dto.startDate && dto.deadline && new Date(dto.startDate) > new Date(dto.deadline)) {
     throw new BadRequest('deadline must be on or after startDate');
   }
@@ -234,6 +276,19 @@ export async function updateTask(
   if (!before) throw new NotFound('Task not found');
   await assertCan(ctx, 'EDIT_TASK', before.projectId, { taskId });
 
+  await assertRefsInProject(before.projectId, {
+    phaseId: dto.phaseId,
+    workstreamId: dto.workstreamId,
+    budgetCategoryId: dto.budgetCategoryId,
+  });
+
+  // Moving a task into a DIFFERENT workstream must also be permitted for the target workstream —
+  // otherwise a LEAD who owns the current workstream could push the task into one they don't own,
+  // escaping their scope. PM/OWNER hold EDIT_TASK unconditionally, so this is a no-op for them.
+  if (dto.workstreamId && dto.workstreamId !== before.workstreamId) {
+    await assertCan(ctx, 'EDIT_TASK', before.projectId, { workstreamId: dto.workstreamId });
+  }
+
   // Date-order check across before/after merged values.
   const start = dto.startDate === undefined ? before.startDate : toDate(dto.startDate);
   const end = dto.deadline === undefined ? before.deadline : toDate(dto.deadline);
@@ -307,6 +362,7 @@ export async function updateTaskProgress(
   const inv = applyTaskInvariants({
     current: { status: before.status, percent: before.percent },
     next: { status: dto.status, percent: dto.percent },
+    kanbanMove: dto.kanbanMove,
   });
   if (inv.conflict) throw new BadRequest('status and percent are inconsistent');
 

@@ -4,7 +4,7 @@ import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-store';
 import { bootstrapSession } from '@/lib/api-client';
 import { useI18n, type Lang } from '@/lib/i18n';
-import { usePermissions } from '@/lib/permissions';
+import { usePermissions, type Cap } from '@/lib/permissions';
 import { useProjects } from '@/features/projects/useProjects';
 import { useLogout } from '@/features/auth/useLogin';
 import { NotificationBell } from '@/features/notifications/NotificationBell';
@@ -12,12 +12,12 @@ import { TaskDrawerHost } from '@/features/tasks/TaskDrawerHost';
 import { Spinner } from '@/components/Spinner';
 import { ProgressLink } from '@/components/ProgressLink';
 
-type Tab = { seg: string; key: string; cap?: 'MANAGE_CONFIG' | 'IMPORT_EXPORT' };
+type Tab = { seg: string; key: string; cap?: Cap };
 const TABS: Tab[] = [
   { seg: 'dashboard', key: 'dashboard' }, { seg: 'tasks', key: 'tasks' },
   { seg: 'board', key: 'board' }, { seg: 'calendar', key: 'calendar' },
   { seg: 'budget', key: 'budget' }, { seg: 'gates', key: 'gates' },
-  { seg: 'activity', key: 'activity' }, { seg: 'team', key: 'team' },
+  { seg: 'activity', key: 'activity', cap: 'VIEW_AUDIT' }, { seg: 'team', key: 'team' },
   { seg: 'settings', key: 'settings', cap: 'MANAGE_CONFIG' },
   { seg: 'io', key: 'io', cap: 'IMPORT_EXPORT' },
   { seg: 'ai', key: 'ai' },

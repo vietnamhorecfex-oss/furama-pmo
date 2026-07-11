@@ -15,13 +15,28 @@ export interface SchedulableTask {
 /** Tolerance band (percentage points) around expected progress that still counts as on-track. */
 const ON_TRACK_BAND = 10;
 
+/**
+ * True once a (date-only) deadline's whole DAY has passed. Deadlines are stored at UTC midnight,
+ * so we compare against the start of today in UTC — a task due today is NOT overdue during its own
+ * deadline day (the old `deadline < now` flagged it late from ~07:00 Vietnam time on the due date).
+ */
+export function startOfTodayUtc(now: Date = new Date()): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+export function isPastDeadline(deadline: string | Date | null, now: Date = new Date()): boolean {
+  if (!deadline) return false;
+  const d = typeof deadline === 'string' ? new Date(deadline) : deadline;
+  return d.getTime() < startOfTodayUtc(now).getTime();
+}
+
 export function scheduleHealth(t: SchedulableTask, now: Date = new Date()): Health {
   if (t.status === 'COMPLETED' || t.percent >= 100) return 'DONE';
   if (!t.deadline) return 'NONE';
 
   const deadline = new Date(t.deadline);
-  // Past the deadline and not done → late, regardless of how much is left.
-  if (deadline.getTime() < now.getTime()) return 'OVERDUE';
+  // Past the deadline DAY and not done → late, regardless of how much is left.
+  if (isPastDeadline(t.deadline, now)) return 'OVERDUE';
 
   // No start date: can't model a curve. Treat as on track until the deadline passes.
   if (!t.startDate) return 'ON_TRACK';

@@ -8,7 +8,7 @@
  *  - this.budget.summary(ctx, projectId) → budgetSummary(ctx, projectId) from ../budget/budget
  *
  * Key computation semantics (do NOT change):
- *  - "Overdue" = deadline < now AND status != COMPLETED
+ *  - "Overdue" = deadline DAY has passed (date-only, UTC) AND status != COMPLETED
  *  - "At risk" = deadline within 7 days AND status = NOT_STARTED (strict: not in-progress)
  *  - "Upcoming deadlines" = deadline in [now, now+14d] AND not completed, ordered by deadline asc, take 12
  *  - byPhase/byWorkstream: join completed/total maps; append id:null "Unassigned" bucket if it has tasks
@@ -26,6 +26,7 @@ import { assertCan } from '../rbac/rbac';
 import type { AuthContext } from '../rbac/rbac';
 import { NotFound } from '../http/errors';
 import { budgetSummary } from '../budget/budget';
+import { startOfTodayUtc } from '../../lib/schedule';
 
 const ALL_STATUSES: TaskStatus[] = ['NOT_STARTED', 'IN_PROGRESS', 'IN_REVIEW', 'BLOCKED', 'COMPLETED'];
 const ALL_PRIORITIES: Priority[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
@@ -65,9 +66,10 @@ export async function dashboardOverview(ctx: AuthContext, projectId: string): Pr
         _count: { _all: true },
         orderBy: { priority: 'asc' },
       }),
-      // 4. overdue count: deadline < now AND status != COMPLETED
+      // 4. overdue count: deadline DAY has passed AND status != COMPLETED (date-only: a task due
+      //    today is not overdue until tomorrow — matches the client health chips / Kanban).
       prisma.task.count({
-        where: { projectId, deadline: { lt: now }, NOT: { status: 'COMPLETED' } },
+        where: { projectId, deadline: { lt: startOfTodayUtc(now) }, NOT: { status: 'COMPLETED' } },
       }),
       // 5. atRisk count: deadline in [now, now+7d] AND status = NOT_STARTED (strict)
       prisma.task.count({

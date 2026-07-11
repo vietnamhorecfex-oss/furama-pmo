@@ -1,5 +1,5 @@
 'use client';
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
 export type Lang = 'vi' | 'en';
 
@@ -167,12 +167,19 @@ interface I18nCtx {
 const I18nContext = createContext<I18nCtx>({ lang: 'vi', setLang: () => {}, t: vi });
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const stored = (typeof localStorage !== 'undefined' ? localStorage.getItem('furama_lang') : null) as Lang | null;
-  const [lang, setLangState] = useState<Lang>(stored ?? 'vi');
+  // Start from 'vi' on both server and first client render so hydration matches. The persisted
+  // preference is read AFTER mount — reading localStorage during render caused a guaranteed
+  // hydration mismatch (SSR has no localStorage) for every user whose stored language is 'en'.
+  const [lang, setLangState] = useState<Lang>('vi');
+
+  useEffect(() => {
+    const stored = (typeof localStorage !== 'undefined' ? localStorage.getItem('furama_lang') : null) as Lang | null;
+    if (stored === 'en' || stored === 'vi') setLangState(stored);
+  }, []);
 
   function setLang(l: Lang) {
     setLangState(l);
-    localStorage.setItem('furama_lang', l);
+    if (typeof localStorage !== 'undefined') localStorage.setItem('furama_lang', l);
   }
 
   return (

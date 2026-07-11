@@ -9,3 +9,4 @@ export class Unauthorized extends ApiException { constructor(m = 'Unauthorized')
 export class Forbidden extends ApiException { constructor(m = 'Forbidden') { super(403, m); } }
 export class NotFound extends ApiException { constructor(m = 'Not found') { super(404, m); } }
 export class Conflict extends ApiException { constructor(m = 'Conflict') { super(409, m); } }
+export class TooManyRequests extends ApiException { constructor(m = 'Too many requests') { super(429, m); } }

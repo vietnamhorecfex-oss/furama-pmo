@@ -38,11 +38,17 @@ export function applyTaskInvariants(input: InvariantInput): InvariantResult {
   const status = input.next.status ?? input.current.status;
   let percent = input.next.percent ?? input.current.percent;
 
-  // Kanban move resets must happen BEFORE the other rules — moving a 40%-in-progress card
-  // back to the NOT_STARTED column means the user intends to discard progress; without this
-  // reset, Rule 3 would re-promote to IN_PROGRESS based on the carried-over percent.
-  if (input.kanbanMove && input.next.status === 'NOT_STARTED' && input.next.percent === undefined) {
-    percent = 0;
+  // Kanban / status-picker moves make the TARGET status authoritative; we derive percent to fit
+  // the chosen column so the auto-rules below don't bounce the card straight back. This must run
+  // BEFORE the rules. Without it: dragging a 40% card to NOT_STARTED re-promotes to IN_PROGRESS
+  // (Rule 3), and reopening a done card (COMPLETED/100 → IN_PROGRESS) snaps back to COMPLETED
+  // (Rule 2) — both observed as "the card won't move".
+  if (input.kanbanMove && input.next.status !== undefined && input.next.percent === undefined) {
+    if (input.next.status === 'NOT_STARTED') {
+      percent = 0; // discard progress
+    } else if (input.next.status !== 'COMPLETED' && percent >= 100) {
+      percent = 0; // reopening a completed card → drop below 100 so it isn't re-completed
+    }
   }
 
   let conflict = false;

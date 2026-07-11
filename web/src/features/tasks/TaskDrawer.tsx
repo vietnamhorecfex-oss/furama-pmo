@@ -258,6 +258,9 @@ function HistoryTimeline({
   projectId, taskId, i18n,
 }: { projectId: string; taskId: string; i18n: ReturnType<typeof useI18n>['t'] }) {
   const history = useTaskHistory(projectId, taskId);
+  // MEMBER/VIEWER lack VIEW_AUDIT → the history endpoint 403s. Hide the section rather than
+  // rendering the misleading "Chưa có lịch sử" (which implies the task genuinely has none).
+  if (history.isError) return null;
   const entries = (history.data ?? []).filter((e) =>
     e.action === 'task.progress' || e.action === 'task.updated' || e.action === 'task.created',
   );

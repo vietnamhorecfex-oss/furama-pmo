@@ -39,8 +39,11 @@ export async function registerUser(dto: RegisterDto, ip: string | null): Promise
     update: {},
     create: { slug, name: slug },
   });
+  // Email must be globally unique, not just per-org: login (loginUser) looks users up by
+  // email alone with no org discriminator, so a second row with the same email in another
+  // org would make that email un-loginable forever (findMany !== 1). Check across all orgs.
   const exists = await prisma.user.findFirst({
-    where: { orgId: org.id, email: dto.email.toLowerCase() },
+    where: { email: dto.email.toLowerCase() },
     select: { id: true },
   });
   if (exists) throw new Conflict('Email already registered');

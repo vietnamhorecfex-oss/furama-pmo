@@ -85,7 +85,9 @@ export function ConfigLists({ projectId }: Props) {
           </button>
         ))}
       </div>
-      <DimSection projectId={projectId} dim={active} />
+      {/* key per dimension → remount on tab switch so the create-form state (which is seeded
+          once from THIS dim's field defaults) doesn't bleed values across tabs. */}
+      <DimSection key={active.kind} projectId={projectId} dim={active} />
     </div>
   );
 }

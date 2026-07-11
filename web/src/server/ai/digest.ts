@@ -17,6 +17,7 @@ import { assertCan } from '../rbac/rbac';
 import type { AuthContext } from '../rbac/rbac';
 import { dashboardOverview } from '../dashboard/dashboard';
 import { getAiClient, type AnthropicLike } from './assistant';
+import { startOfTodayUtc } from '../../lib/schedule';
 
 export type { AnthropicLike };
 
@@ -73,7 +74,7 @@ export async function taskReminders(ctx: AuthContext, projectId: string, deps?: 
 
   const [overdueRows, dueSoonRows, blockedRows] = await Promise.all([
     prisma.task.findMany({
-      where: { projectId, deadline: { lt: now }, NOT: { status: 'COMPLETED' } },
+      where: { projectId, deadline: { lt: startOfTodayUtc(now) }, NOT: { status: 'COMPLETED' } },
       orderBy: [{ priority: 'asc' }, { deadline: 'asc' }],
       take: 40,
       select,

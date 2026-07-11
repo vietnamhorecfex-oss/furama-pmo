@@ -18,8 +18,9 @@ import { prisma } from '../prisma';
 import { assertCan, effectiveRole } from '../rbac/rbac';
 import type { AuthContext } from '../rbac/rbac';
 import { auditRecord } from '../audit/audit';
-import { Forbidden, NotFound } from '../http/errors';
-import { listTasks, createTask, updateTask, updateTaskProgress } from '../tasks/tasks';
+import { BadRequest, Forbidden, NotFound } from '../http/errors';
+import { listTasks, myTasks, createTask, updateTask, updateTaskProgress } from '../tasks/tasks';
+import { createTaskSchema, progressUpdateSchema } from '@furama/shared';
 import { addComment } from '../comments/comments';
 import { budgetSummary } from '../budget/budget';
 import { dashboardOverview } from '../dashboard/dashboard';
@@ -29,6 +30,7 @@ import { createBudgetCategory } from '../config/categories';
 
 import toolsJson from './tools.json';
 import { getGeminiClient } from './gemini';
+import { startOfTodayUtc } from '../../lib/schedule';
 
 const TOOLS: Anthropic.Tool[] = toolsJson.tools.map((t) => ({
   name: t.name,
@@ -97,9 +99,17 @@ export async function chat(
     };
   }
 
-  // Resolve or create conversation
+  // Resolve or create conversation. A caller-supplied conversationId MUST belong to this
+  // user AND this project — otherwise a member could replay another user's/project's chat
+  // history (it is fed into the prompt) and append to it (IDOR).
   let convId = conversationId;
-  if (!convId) {
+  if (convId) {
+    const owned = await prisma.aiConversation.findFirst({
+      where: { id: convId, projectId, userId: ctx.userId },
+      select: { id: true },
+    });
+    if (!owned) throw new Forbidden('Conversation not found');
+  } else {
     const conv = await prisma.aiConversation.create({
       data: { projectId, userId: ctx.userId },
     });
@@ -132,12 +142,15 @@ export async function chat(
     today,
   });
 
-  // Load previous messages for context (last 10 pairs max)
-  const prevMessages = await prisma.aiMessage.findMany({
-    where: { conversationId: convId },
-    orderBy: { createdAt: 'asc' },
-    take: 20,
-  });
+  // Load the most RECENT 20 messages for context, then restore chronological order.
+  // (Was ordering asc+take, which pinned context to the oldest 20 and "forgot" recent turns.)
+  const prevMessages = (
+    await prisma.aiMessage.findMany({
+      where: { conversationId: convId },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    })
+  ).reverse();
 
   const messages: Anthropic.MessageParam[] = prevMessages.map((m) => ({
     role: m.role === 'USER' ? 'user' : 'assistant',
@@ -281,10 +294,16 @@ export async function confirmAction(ctx: AuthContext, actionId: string): Promise
     return { message: `Action already ${action.status.toLowerCase()}` };
   }
 
-  await prisma.aiActionLog.update({
-    where: { id: actionId },
+  // Atomically claim the action: the conditional updateMany lets exactly one concurrent
+  // confirm flip PROPOSED→CONFIRMED, so a double-click / retry can't dispatch the write twice.
+  const claimed = await prisma.aiActionLog.updateMany({
+    where: { id: actionId, status: 'PROPOSED' },
     data: { status: 'CONFIRMED' },
   });
+  if (claimed.count === 0) {
+    const fresh = await prisma.aiActionLog.findUnique({ where: { id: actionId } });
+    return { message: `Action already ${(fresh?.status ?? 'processed').toLowerCase()}` };
+  }
 
   let result: unknown;
   try {
@@ -369,6 +388,12 @@ async function dispatchReadTool(
       }
 
       case 'search_tasks': {
+        // "me" can't go through the label-based assignee filter (labels are display names, not
+        // user ids) — route it to myTasks, which matches by userId OR the caller's memberLabel.
+        if (input.assignee === 'me') {
+          const mine = await myTasks(ctx, projectId);
+          return { tasks: mine.slice(0, 50), total: mine.length };
+        }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const result = await listTasks(ctx, projectId, {
           q: input.q as string | undefined,
@@ -376,7 +401,7 @@ async function dispatchReadTool(
           workstreamId: input.workstreamId as string | undefined,
           status: input.status as any,
           priority: input.priority as any,
-          assignee: input.assignee === 'me' ? ctx.userId : (input.assignee as string | undefined),
+          assignee: input.assignee as string | undefined,
           page: (input.page as number | undefined) ?? 1,
           pageSize: Math.min((input.pageSize as number | undefined) ?? 25, 50),
           order: 'asc',
@@ -397,7 +422,7 @@ async function dispatchReadTool(
         // anywhere in a 600+ task project. chat() already asserted VIEW_PROJECT.
         const where: Prisma.TaskWhereInput = {
           projectId,
-          deadline: { lt: new Date() },
+          deadline: { lt: startOfTodayUtc() },
           NOT: { status: 'COMPLETED' },
           ...(input.workstreamId ? { workstreamId: input.workstreamId as string } : {}),
         };
@@ -452,17 +477,25 @@ async function dispatchWriteTool(
   switch (tool) {
     case 'update_task_progress': {
       const taskId = input.taskId as string;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return updateTaskProgress(ctx, taskId, {
-        status: input.status as any,
-        percent: input.percent as number | undefined,
-        notes: input.notes as string | undefined,
-      }, null);
+      // Validate model-supplied args with the real DTO schema (percent 0–100, status enum,
+      // at-least-one-field) instead of casting — otherwise the model could store e.g. percent=150.
+      const patch = progressUpdateSchema.parse({
+        status: input.status,
+        percent: input.percent,
+        notes: input.notes,
+      });
+      return updateTaskProgress(ctx, taskId, patch, null);
     }
 
     case 'bulk_update_progress': {
       const filter = input.filter as Record<string, unknown>;
-      const patch = input.patch as Record<string, unknown>;
+      const rawPatch = input.patch as Record<string, unknown>;
+      // Validate the patch ONCE (percent 0–100, status enum) before fanning it out to ≤100 tasks.
+      const patch = progressUpdateSchema.parse({
+        status: rawPatch.status,
+        percent: rawPatch.percent,
+        notes: rawPatch.notes,
+      });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const listResult = await listTasks(ctx, projectId, {
         workstreamId: filter.workstreamId as string | undefined,
@@ -476,12 +509,7 @@ async function dispatchWriteTool(
       const results = [];
       for (const task of listResult.data) {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const updated = await updateTaskProgress(ctx, task.id, {
-            status: patch.status as any,
-            percent: patch.percent as number | undefined,
-            notes: patch.notes as string | undefined,
-          }, null);
+          const updated = await updateTaskProgress(ctx, task.id, patch, null);
           results.push({ taskId: task.id, title: task.title, status: 'updated', result: updated });
         } catch {
           results.push({ taskId: task.id, title: task.title, status: 'skipped' });
@@ -492,7 +520,8 @@ async function dispatchWriteTool(
 
     case 'shift_deadline': {
       const taskId = input.taskId as string;
-      const days = input.days as number;
+      const days = Number(input.days);
+      if (!Number.isFinite(days)) throw new BadRequest('shift_deadline: days must be a number');
       const task = await prisma.task.findUnique({ where: { id: taskId } });
       if (!task) throw new NotFound('Task not found');
       const newDeadline = task.deadline
@@ -502,22 +531,28 @@ async function dispatchWriteTool(
     }
 
     case 'create_task': {
-      return createTask(ctx, projectId, {
-        title: input.title as string,
-        description: input.description as string | undefined,
-        phaseId: input.phaseId as string | undefined,
-        workstreamId: input.workstreamId as string | undefined,
-        startDate: input.startDate as string | undefined,
-        deadline: input.deadline as string | undefined,
-        priority: input.priority as string | undefined,
-        inChargeLabel: input.inChargeLabel as string | undefined,
-        budgetVnd: input.budgetVnd as number | undefined,
-      } as Parameters<typeof createTask>[2], null);
+      // Run through the real create schema so defaults apply (notably budgetVnd/actualVnd → 0)
+      // and enums/dates are validated. Casting here previously left actualVnd undefined →
+      // BigInt(undefined) threw at insert, so EVERY AI-created task failed at confirm time.
+      const dto = createTaskSchema.parse({
+        title: input.title,
+        description: input.description,
+        phaseId: input.phaseId,
+        workstreamId: input.workstreamId,
+        startDate: input.startDate,
+        deadline: input.deadline,
+        priority: input.priority,
+        inChargeLabel: input.inChargeLabel,
+        budgetVnd: input.budgetVnd,
+      });
+      return createTask(ctx, projectId, dto, null);
     }
 
     case 'add_comment': {
       const taskId = input.taskId as string;
-      return addComment(ctx, taskId, input.body as string, null);
+      const body = typeof input.body === 'string' ? input.body.trim() : '';
+      if (!body) throw new BadRequest('add_comment: body is required');
+      return addComment(ctx, taskId, body, null);
     }
 
     case 'create_config_item': {
@@ -544,10 +579,18 @@ async function dispatchWriteTool(
 
     case 'send_notification': {
       await assertCan(ctx, 'MANAGE_MEMBERS', projectId);
+      const targetUserId = input.userId as string;
+      // The target must be a member of THIS project — otherwise the model could be steered
+      // (prompt injection) into notifying an arbitrary user, including one in another org.
+      const isMember = await prisma.projectMember.findFirst({
+        where: { projectId, userId: targetUserId },
+        select: { id: true },
+      });
+      if (!isMember) throw new BadRequest('Target user is not a member of this project');
       await prisma.notification.create({
         data: {
           projectId,
-          userId: input.userId as string,
+          userId: targetUserId,
           type: 'AI_NUDGE',
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           severity: ((input.severity as string | undefined) ?? 'INFO') as any,

@@ -117,6 +117,8 @@ export function useTaskHistory(projectId: string | undefined, taskId: string | u
   return useQuery({
     enabled: !!projectId && !!taskId,
     queryKey: ['task-history', taskId],
+    // A 403 (MEMBER/VIEWER without VIEW_AUDIT) or 404 won't succeed on retry — don't hammer it.
+    retry: false,
     queryFn: async (): Promise<AuditLogDto[]> => {
       const { data } = await api.get<AuditLogDto[]>(
         `/projects/${projectId}/activity/history/Task/${taskId}`,

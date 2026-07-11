@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { prisma } from '../prisma';
 import { getConfig } from '../config';
 import { Unauthorized } from '../http/errors';
+import { auditRecord } from '../audit/audit';
 
 export interface AccessTokenClaims { sub: string; orgId: string }
 export interface IssuedTokens { accessToken: string; refreshToken: string; refreshExpiresAt: Date }
@@ -64,6 +65,10 @@ export async function rotate(rawRefreshToken: string, ip: string | null): Promis
   if (row.revokedAt || row.replacedById) {
     // Reuse detected: revoke the entire family to invalidate all tokens in this lineage
     await revokeFamily(row.familyId);
+    await auditRecord(
+      { actorId: row.userId, ip },
+      { action: 'auth.refresh.reuse_detected', entityType: 'RefreshToken', entityId: row.id, after: { familyId: row.familyId } },
+    );
     throw new Unauthorized('Refresh token reuse detected');
   }
   if (row.expiresAt.getTime() <= Date.now()) throw new Unauthorized('Refresh token expired');
@@ -80,9 +85,13 @@ export async function rotate(rawRefreshToken: string, ip: string | null): Promis
     data: { revokedAt: new Date(), replacedById: minted.newId },
   });
   if (updated.count === 0) {
-    // Race condition: another request already rotated this token
-    await revokeFamily(row.familyId);
-    throw new Unauthorized('Refresh token reuse detected');
+    // Lost a benign race: a sibling rotation already replaced this exact (still-current) token
+    // between our read and write — e.g. two browser tabs refreshing at once. This is NOT reuse
+    // of an already-rotated token (that is caught above via revokedAt/replacedById and revokes
+    // the family). Roll back the token we optimistically minted and reject only THIS request;
+    // do NOT revoke the family, which would log the user out of every window.
+    await prisma.refreshToken.delete({ where: { id: minted.newId } }).catch(() => undefined);
+    throw new Unauthorized('Concurrent refresh; please retry');
   }
   return minted.tokens;
 }
@@ -94,4 +103,8 @@ export async function revokeByRawToken(rawRefreshToken: string): Promise<void> {
   if (!row) return;
   if (row.id !== parsed.id) return;
   await revokeFamily(row.familyId);
+  await auditRecord(
+    { actorId: row.userId, ip: null },
+    { action: 'auth.logout', entityType: 'RefreshToken', entityId: row.id, after: { familyId: row.familyId } },
+  );
 }

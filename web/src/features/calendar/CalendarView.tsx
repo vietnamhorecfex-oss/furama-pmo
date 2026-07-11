@@ -35,7 +35,10 @@ interface Props {
 
 function startOfMonth(y: number, m: number) { return new Date(y, m, 1); }
 function daysInMonth(y: number, m: number) { return new Date(y, m + 1, 0).getDate(); }
-function isoDate(d: Date) { return d.toISOString().split('T')[0]; }
+/** Local calendar date 'YYYY-MM-DD' — matches how grid cells are built (NOT UTC via toISOString). */
+function localDateStr(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 export function CalendarView({ projectId, onOpen }: Props) {
   const { t, lang } = useI18n();
@@ -58,9 +61,9 @@ export function CalendarView({ projectId, onOpen }: Props) {
     const map = new Map<string, TaskDto[]>();
     for (const task of tasks) {
       if (!task.deadline) continue;
-      const key = task.deadline.split('T')[0];
-      const d = new Date(key);
-      if (d.getFullYear() === year && d.getMonth() === month) {
+      const key = task.deadline.split('T')[0]; // the deadline's own date; compare as a string
+      const [ky, km] = key.split('-').map(Number);
+      if (ky === year && km - 1 === month) {
         if (!map.has(key)) map.set(key, []);
         map.get(key)!.push(task);
       }
@@ -95,7 +98,7 @@ export function CalendarView({ projectId, onOpen }: Props) {
     : ['January','February','March','April','May','June',
        'July','August','September','October','November','December'];
 
-  const todayStr = isoDate(today);
+  const todayStr = localDateStr(today);
 
   // Legend stats for the month
   const stats: Partial<Record<TaskStatus, number>> = {};

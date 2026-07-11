@@ -2,6 +2,66 @@
 
 Per `CLAUDE.md` golden rule #1, every deviation from the spec is recorded here with a reason.
 
+## 2026-07-11 — Security & correctness bug-fix pass (severe + medium)
+
+A full-project review surfaced a cluster of security/correctness bugs; all severe and medium
+findings fixed. `npm run typecheck` clean · `npm test` **193 passed (28 files)**.
+
+**Auth / tenant isolation**
+- **Account-lockout via cross-org registration.** `email` is unique only per-org but `loginUser`
+  looks up by email alone (`findMany !== 1`), so registering a victim's email under a new org
+  slug made it un-loginable forever. `registerUser` now enforces **global** email uniqueness
+  (`web/src/server/auth/service.ts`). Residual (open self-registration into an existing org) is a
+  product decision — see "Open" below.
+- **Rate limiting** added to `/auth/login|register|refresh` (was configured but never enforced).
+  New `web/src/server/http/rate-limit.ts` (in-memory sliding window; login/register = AUTH limit,
+  refresh = the looser WRITE limit since it needs a valid cookie and offices share IPs).
+- **`GET /api/v1/users` RBAC.** Was authN-only → any VIEWER could harvest the org name/email
+  directory. Now requires OWNER/PM in ≥1 project.
+- **Refresh-family revocation now audited** (`auth.refresh.reuse_detected`, `auth.logout`). The
+  benign concurrent-refresh race no longer revokes the whole family (it dropped users from every
+  tab); it now rejects only the losing request and rolls back its orphan mint.
+
+**AI Copilot**
+- **conversationId IDOR** — `chat()` now verifies the conversation belongs to the caller AND
+  project before reading/appending (was cross-user chat-history disclosure + poisoning).
+- **Tool args validated with the real zod DTOs** (were cast). Fixes: `create_task` always crashed
+  (`BigInt(undefined)` on actualVnd); `update_task_progress` could store `percent=150`;
+  `send_notification` could target any user (now must be a project member). `confirmAction` is now
+  atomic (conditional `updateMany`) so a double-click can't execute the write twice. Context now
+  loads the newest 20 messages (was oldest); `search_tasks assignee:"me"` now resolves.
+
+**Tasks**
+- **Cross-project FK guard** — `createTask`/`updateTask` reject a phase/workstream/budget-category
+  from another project (was silent budget-rollup corruption / raw 500). Moving a task to a new
+  workstream is re-checked against the target so a LEAD can't push tasks out of their scope.
+- **Kanban / status-dropdown transitions** — added a `kanbanMove` flag so dragging a card to
+  "Not started" or reopening a done card actually sticks (the status/percent invariant used to
+  bounce it back with a silent 200).
+
+**Import/export**
+- Import no longer zeroes the project budget cap when a file has no budget column; status/percent
+  reconciled through the shared invariants; `createdById` no longer overwritten on re-import; the
+  import route sets `maxDuration`. CSV export escapes formula-injection (`= + - @`). Project/CSV
+  exports now write an audit row and project their member select.
+
+**Frontend**
+- **Logout/login now clears the TanStack Query cache** — the next user on a shared browser no
+  longer sees the previous user's cached projects/tasks/budget/notifications.
+- i18n language read moved to a post-mount effect (was a guaranteed hydration mismatch for EN).
+- Calendar "today" and month bucketing use local dates (were UTC — wrong day / dropped tasks).
+- "Overdue" is now date-only across client + dashboard + digest + AI (a task due today is not
+  overdue until the next day; was flagged late from ~07:00 VN on the due date).
+- Settings config tabs remount per dimension (form values no longer bleed across tabs). The
+  Activity tab is gated by a new `VIEW_AUDIT` UI cap; the task-drawer History hides on 403 instead
+  of showing a misleading "no history".
+
+**Open (needs a product decision, not fixed):** public self-registration can still create an
+account in an *existing* org (and thus an OWNER-of-its-own-project). Recommend making registration
+invite-only or first-user-only. Also unaddressed by design: `eslint` is not installed so
+`npm run lint` cannot run; and the per-row import is not wrapped in a single transaction (a
+mid-import failure still leaves a partial state — mitigated by `maxDuration`, not eliminated).
+
 ## 2026-07-02 — Gemini fix: disable thinking so answers aren't truncated
 
 Live testing with a real `GEMINI_API_KEY` showed `/ai/reminders` returning markdown cut off

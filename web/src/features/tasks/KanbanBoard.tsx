@@ -8,6 +8,7 @@ import type { TaskDto, TaskStatus } from '@furama/shared';
 import { useAllTasks, useUpdateProgress } from './useTasks';
 import { useI18n } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
+import { isPastDeadline } from '@/lib/schedule';
 
 interface Props {
   projectId: string;
@@ -76,7 +77,7 @@ export function KanbanBoard({ projectId, onOpen }: Props) {
               onDrop={() => {
                 setDraggingOver(null);
                 if (dragId) {
-                  update.mutate({ taskId: dragId, payload: { status: col.key } });
+                  update.mutate({ taskId: dragId, payload: { status: col.key, kanbanMove: true } });
                   setDragId(null);
                 }
               }}
@@ -111,7 +112,7 @@ export function KanbanBoard({ projectId, onOpen }: Props) {
                     <p className="text-sm text-slate-800 line-clamp-2 leading-snug">{task.title}</p>
                     {task.deadline && (
                       <p className={`text-xs mt-1 ${
-                        new Date(task.deadline) < new Date() && task.status !== 'COMPLETED'
+                        isPastDeadline(task.deadline) && task.status !== 'COMPLETED'
                           ? 'text-red-600 font-semibold'
                           : 'text-slate-400'
                       }`}>

@@ -170,7 +170,7 @@ export function TasksTable({ projectId, onOpen }: Props) {
                     <select
                       value={task.status}
                       disabled={updateProgress.isPending}
-                      onChange={(e) => updateProgress.mutate({ taskId: task.id, payload: { status: e.target.value as TaskStatus } })}
+                      onChange={(e) => updateProgress.mutate({ taskId: task.id, payload: { status: e.target.value as TaskStatus, kanbanMove: true } })}
                       className="rounded-md border border-slate-300 px-1 py-0.5 text-xs bg-white"
                     >
                       {STATUSES.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
